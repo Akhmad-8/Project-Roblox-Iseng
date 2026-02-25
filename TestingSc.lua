@@ -1,13 +1,9 @@
 --[[
-    VelxHub Premium Universal Script UI v1.1 (Fixed)
-    Features: Teleport, NoClip, Fly, Speed, ESP, God Mode, etc.
-    Modern dark theme with smooth animations
-    
-    FIXES v1.1:
-    - Fixed MiniBtn (P) click detection - no more accidental open
-    - Fixed Freecam - character now stays frozen
-    - Spectate redesigned - player list + overlay UI
-    - Dance tab - Loop & Stop moved near preset dances
+    VelxHub Premium Universal Script UI v1.4
+    UPDATE v1.4:
+    - Toggle key: no delay, instant response
+    - TP Dropdown: ScrollingFrame, bisa scroll banyak player
+    - Freecam: dipindah ke section CAMERA, urutan lebih logis
 ]]
 
 -- Services
@@ -169,7 +165,7 @@ local TitleText = Instance.new("TextLabel", TitleBar)
 TitleText.Size = UDim2.new(1, -80, 1, 0)
 TitleText.Position = UDim2.new(0, 14, 0, 0)
 TitleText.BackgroundTransparency = 1
-TitleText.Text = ">> VelxHub Premium Universal Script v1.1 "
+TitleText.Text = ">> VelxHub Premium Universal Script v1.5 "
 TitleText.TextColor3 = C.text
 TitleText.Font = Enum.Font.GothamBold
 TitleText.TextSize = 14
@@ -197,6 +193,7 @@ local CloseBtn = titleBtn("X", UDim2.new(1, -38, 0, 4), C.red)
 local MinBtn = titleBtn("—", UDim2.new(1, -70, 0, 4), C.orange)
 
 local minimized = false
+local pcModeEnabled = false   -- PC Mode: disembunyikan MiniBtn saat minimize
 
 -- Mini button (small square when minimized)
 local MiniBtn = Instance.new("TextButton", ScreenGui)
@@ -285,11 +282,16 @@ MinBtn.MouseButton1Click:Connect(function()
     tween(Main, {Size = UDim2.new(0, 40, 0, 40), BackgroundTransparency = 0.5}, 0.3)
     task.wait(0.3)
     Main.Visible = false
-    MiniBtn.Position = UDim2.new(
-        Main.Position.X.Scale, Main.Position.X.Offset,
-        Main.Position.Y.Scale, Main.Position.Y.Offset
-    )
-    MiniBtn.Visible = true
+    -- Tampilkan MiniBtn hanya jika PC Mode tidak aktif
+    if not pcModeEnabled then
+        MiniBtn.Position = UDim2.new(
+            Main.Position.X.Scale, Main.Position.X.Offset,
+            Main.Position.Y.Scale, Main.Position.Y.Offset
+        )
+        MiniBtn.Visible = true
+    else
+        notify("Minimized", "Tekan " .. tostring(currentToggleKey.Name) .. " / Insert untuk buka kembali")
+    end
 end)
 
 -- ═══════════════════════════════════════
@@ -447,7 +449,14 @@ local function addToggle(parent, label, default, callback)
         if callback then callback(state) end
     end)
 
-    return holder
+    local function setState(newState)
+        if state == newState then return end
+        state = newState
+        tween(togBg, {BackgroundColor3 = state and C.accent or C.toggleOff}, 0.2)
+        tween(circle, {Position = state and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2)}, 0.2)
+    end
+
+    return holder, setState
 end
 
 local function addButton(parent, label, callback)
@@ -724,22 +733,253 @@ end)
 -- ═══════════════════════════════════════
 local tPage = Pages["Teleport"]
 
+-- ── TELEPORT TO PLAYER: Select-style ──
 addLabel(tPage, "-- TELEPORT TO PLAYER")
 
-addInput(tPage, "Player name...", function(text)
-    if text == "" then return end
+-- State
+local tpSelectedPlayer = nil
+
+-- ── "Select Player to Teleport" card ──
+local tpSelectCard = Instance.new("Frame", tPage)
+tpSelectCard.Size = UDim2.new(1, 0, 0, 44)
+tpSelectCard.BackgroundColor3 = C.card
+tpSelectCard.BorderSizePixel = 0
+addCorner(tpSelectCard, 8)
+addStroke(tpSelectCard, C.border, 1)
+
+local tpSelectIcon = Instance.new("TextLabel", tpSelectCard)
+tpSelectIcon.Size = UDim2.new(0, 28, 1, 0)
+tpSelectIcon.Position = UDim2.new(0, 10, 0, 0)
+tpSelectIcon.BackgroundTransparency = 1
+tpSelectIcon.Text = "👤"
+tpSelectIcon.TextSize = 16
+tpSelectIcon.Font = Enum.Font.GothamBold
+tpSelectIcon.TextColor3 = C.textDim
+
+local tpSelectTop = Instance.new("TextLabel", tpSelectCard)
+tpSelectTop.Size = UDim2.new(1, -50, 0, 16)
+tpSelectTop.Position = UDim2.new(0, 38, 0, 6)
+tpSelectTop.BackgroundTransparency = 1
+tpSelectTop.Text = "Select Player to Teleport"
+tpSelectTop.TextColor3 = C.textDim
+tpSelectTop.Font = Enum.Font.GothamMedium
+tpSelectTop.TextSize = 10
+tpSelectTop.TextXAlignment = Enum.TextXAlignment.Left
+
+local tpSelectName = Instance.new("TextLabel", tpSelectCard)
+tpSelectName.Size = UDim2.new(1, -50, 0, 18)
+tpSelectName.Position = UDim2.new(0, 38, 0, 20)
+tpSelectName.BackgroundTransparency = 1
+tpSelectName.Text = "— (none selected)"
+tpSelectName.TextColor3 = C.text
+tpSelectName.Font = Enum.Font.GothamBold
+tpSelectName.TextSize = 13
+tpSelectName.TextXAlignment = Enum.TextXAlignment.Left
+tpSelectName.TextTruncate = Enum.TextTruncate.AtEnd
+
+-- Chevron kanan
+local tpSelectChev = Instance.new("TextLabel", tpSelectCard)
+tpSelectChev.Size = UDim2.new(0, 24, 1, 0)
+tpSelectChev.Position = UDim2.new(1, -30, 0, 0)
+tpSelectChev.BackgroundTransparency = 1
+tpSelectChev.Text = "▼"
+tpSelectChev.TextColor3 = C.textDim
+tpSelectChev.Font = Enum.Font.GothamBold
+tpSelectChev.TextSize = 11
+
+-- ── Dropdown list: ScrollingFrame supaya bisa di-scroll ──
+local tpDropdown = Instance.new("ScrollingFrame", tPage)
+tpDropdown.Size = UDim2.new(1, 0, 0, 0)
+tpDropdown.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+tpDropdown.BorderSizePixel = 0
+tpDropdown.ClipsDescendants = true
+tpDropdown.Visible = false
+tpDropdown.ScrollBarThickness = 3
+tpDropdown.ScrollBarImageColor3 = C.accent
+tpDropdown.CanvasSize = UDim2.new(0, 0, 0, 0)
+tpDropdown.AutomaticCanvasSize = Enum.AutomaticSize.Y
+tpDropdown.ScrollingDirection = Enum.ScrollingDirection.Y
+addCorner(tpDropdown, 8)
+addStroke(tpDropdown, C.accent, 1)
+
+local tpDropLayout = Instance.new("UIListLayout", tpDropdown)
+tpDropLayout.Padding = UDim.new(0, 2)
+local tpDropPad = Instance.new("UIPadding", tpDropdown)
+tpDropPad.PaddingTop = UDim.new(0, 4)
+tpDropPad.PaddingBottom = UDim.new(0, 4)
+tpDropPad.PaddingLeft = UDim.new(0, 4)
+tpDropPad.PaddingRight = UDim.new(0, 4)
+
+local TP_DROP_MAX_H = 200  -- max tinggi dropdown sebelum scroll aktif
+
+local tpDropOpen = false
+
+local function closeTpDropdown()
+    tpDropOpen = false
+    tween(tpDropdown, {Size = UDim2.new(1, 0, 0, 0)}, 0.18)
+    tween(tpSelectChev, {Rotation = 0}, 0.18)
+    task.delay(0.2, function() if not tpDropOpen then tpDropdown.Visible = false end end)
+end
+
+local function buildTpDropdown()
+    for _, c in tpDropdown:GetChildren() do
+        if c:IsA("TextButton") or c:IsA("Frame") then c:Destroy() end
+    end
+    local others = {}
     for _, p in Players:GetPlayers() do
-        if p.Name:lower():find(text:lower()) or p.DisplayName:lower():find(text:lower()) then
-            local hrp = getHRP()
-            local target = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp and target then
-                hrp.CFrame = target.CFrame * CFrame.new(0, 0, 3)
-                notify("Teleported", "→ " .. p.DisplayName)
-            end
-            return
+        if p ~= Player then table.insert(others, p) end
+    end
+
+    if #others == 0 then
+        local noLbl = Instance.new("TextLabel", tpDropdown)
+        noLbl.Size = UDim2.new(1, 0, 0, 30)
+        noLbl.BackgroundTransparency = 1
+        noLbl.Text = "No other players"
+        noLbl.TextColor3 = C.textDim
+        noLbl.Font = Enum.Font.GothamMedium
+        noLbl.TextSize = 11
+    else
+        for _, p in ipairs(others) do
+            local row = Instance.new("TextButton", tpDropdown)
+            row.Size = UDim2.new(1, 0, 0, 48)   -- lebih tinggi
+            row.BackgroundColor3 = C.card
+            row.BackgroundTransparency = 0.3
+            row.BorderSizePixel = 0
+            row.Text = ""
+            addCorner(row, 6)
+
+            -- Avatar circle
+            local avatar = Instance.new("Frame", row)
+            avatar.Size = UDim2.new(0, 30, 0, 30)
+            avatar.Position = UDim2.new(0, 8, 0.5, -15)
+            avatar.BackgroundColor3 = Color3.fromHSV((p.UserId % 360) / 360, 0.55, 0.75)
+            avatar.BorderSizePixel = 0
+            addCorner(avatar, 7)
+            local avatarLetter = Instance.new("TextLabel", avatar)
+            avatarLetter.Size = UDim2.new(1, 0, 1, 0)
+            avatarLetter.BackgroundTransparency = 1
+            avatarLetter.Text = string.upper(string.sub(p.Name, 1, 1))
+            avatarLetter.TextColor3 = Color3.new(1,1,1)
+            avatarLetter.Font = Enum.Font.GothamBold
+            avatarLetter.TextSize = 14
+
+            -- Nama display (lebih besar)
+            local rowName = Instance.new("TextLabel", row)
+            rowName.Size = UDim2.new(1, -50, 0, 22)
+            rowName.Position = UDim2.new(0, 46, 0, 6)
+            rowName.BackgroundTransparency = 1
+            rowName.Text = p.DisplayName
+            rowName.TextColor3 = C.text
+            rowName.Font = Enum.Font.GothamBold
+            rowName.TextSize = 15     -- naik dari 12 → 15
+            rowName.TextXAlignment = Enum.TextXAlignment.Left
+            rowName.TextTruncate = Enum.TextTruncate.AtEnd
+
+            -- Username
+            local rowUser = Instance.new("TextLabel", row)
+            rowUser.Size = UDim2.new(1, -50, 0, 16)
+            rowUser.Position = UDim2.new(0, 46, 0, 27)
+            rowUser.BackgroundTransparency = 1
+            rowUser.Text = "@" .. p.Name
+            rowUser.TextColor3 = C.textDim
+            rowUser.Font = Enum.Font.GothamMedium
+            rowUser.TextSize = 12     -- naik dari 9 → 12
+            rowUser.TextXAlignment = Enum.TextXAlignment.Left
+
+            row.MouseEnter:Connect(function() tween(row, {BackgroundTransparency = 0}, 0.1) end)
+            row.MouseLeave:Connect(function() tween(row, {BackgroundTransparency = 0.3}, 0.1) end)
+
+            row.MouseButton1Click:Connect(function()
+                tpSelectedPlayer = p
+                tpSelectName.Text = p.DisplayName .. "  (@" .. p.Name .. ")"
+                tpSelectIcon.Text = "✅"
+                tween(tpSelectCard, {BackgroundColor3 = Color3.fromRGB(30, 35, 48)}, 0.2)
+                closeTpDropdown()
+            end)
         end
     end
-    notify("Error", "Player not found")
+
+    -- Hitung tinggi dropdown (tiap row 48px), capped di TP_DROP_MAX_H
+    local totalH = (#others == 0 and 1 or #others) * 52 + 12
+    local dropH = math.min(totalH, TP_DROP_MAX_H)
+    return dropH
+end
+
+-- Toggle dropdown saat card diklik
+local tpSelectClickBtn = Instance.new("TextButton", tpSelectCard)
+tpSelectClickBtn.Size = UDim2.new(1, 0, 1, 0)
+tpSelectClickBtn.BackgroundTransparency = 1
+tpSelectClickBtn.Text = ""
+tpSelectClickBtn.ZIndex = 5
+
+tpSelectClickBtn.MouseButton1Click:Connect(function()
+    if tpDropOpen then
+        closeTpDropdown()
+    else
+        tpDropOpen = true
+        tpDropdown.Visible = true
+        local dropH = buildTpDropdown()
+        tween(tpDropdown, {Size = UDim2.new(1, 0, 0, dropH)}, 0.2)
+        tween(tpSelectChev, {Rotation = 180}, 0.18)
+    end
+end)
+
+-- ── "Teleport to Player" action button ──
+local tpActionBtn = Instance.new("TextButton", tPage)
+tpActionBtn.Size = UDim2.new(1, 0, 0, 38)
+tpActionBtn.BackgroundColor3 = C.accent
+tpActionBtn.BackgroundTransparency = 0.2
+tpActionBtn.BorderSizePixel = 0
+tpActionBtn.Text = "▶  Teleport to Player"
+tpActionBtn.TextColor3 = C.text
+tpActionBtn.Font = Enum.Font.GothamBold
+tpActionBtn.TextSize = 13
+addCorner(tpActionBtn, 8)
+
+tpActionBtn.MouseEnter:Connect(function() tween(tpActionBtn, {BackgroundTransparency = 0}, 0.15) end)
+tpActionBtn.MouseLeave:Connect(function() tween(tpActionBtn, {BackgroundTransparency = 0.2}, 0.15) end)
+
+tpActionBtn.MouseButton1Click:Connect(function()
+    if not tpSelectedPlayer then
+        notify("Teleport", "Pilih player dulu dari dropdown!")
+        tween(tpSelectCard, {BackgroundColor3 = C.red}, 0.1)
+        task.delay(0.3, function() tween(tpSelectCard, {BackgroundColor3 = C.card}, 0.3) end)
+        return
+    end
+    local hrp = getHRP()
+    local t = tpSelectedPlayer.Character and tpSelectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp and t then
+        hrp.CFrame = t.CFrame * CFrame.new(0, 0, 3)
+        tween(tpActionBtn, {BackgroundColor3 = C.green}, 0.1)
+        task.delay(0.4, function() tween(tpActionBtn, {BackgroundColor3 = C.accent}, 0.3) end)
+        notify("Teleported", "→ " .. tpSelectedPlayer.DisplayName)
+    else
+        notify("Error", tpSelectedPlayer.DisplayName .. " tidak ditemukan")
+        tween(tpActionBtn, {BackgroundColor3 = C.red}, 0.1)
+        task.delay(0.4, function() tween(tpActionBtn, {BackgroundColor3 = C.accent}, 0.3) end)
+    end
+end)
+
+-- Auto Follow Player toggle
+addToggle(tPage, "Auto Follow Player (selected)", false, function(on)
+    if Connections.autoFollow then Connections.autoFollow:Disconnect() end
+    if on then
+        if not tpSelectedPlayer then notify("Auto Follow", "Pilih player dulu!") return end
+        Connections.autoFollow = RunService.Heartbeat:Connect(function()
+            if not tpSelectedPlayer then return end
+            local hrp = getHRP()
+            local t = tpSelectedPlayer.Character and tpSelectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and t then
+                local dist = (hrp.Position - t.Position).Magnitude
+                if dist > 5 then
+                    hrp.CFrame = t.CFrame * CFrame.new(0, 0, 3)
+                end
+            end
+        end)
+        notify("Auto Follow", "Following: " .. (tpSelectedPlayer and tpSelectedPlayer.DisplayName or "?"))
+    else
+        notify("Auto Follow", "Stopped")
+    end
 end)
 
 addLabel(tPage, "-- TELEPORT TO POSITION")
@@ -774,36 +1014,6 @@ addButton(tPage, "[H] TP to Spawn", function()
         hrp.CFrame = CFrame.new(0, 50, 0)
     end
 end)
-
-addLabel(tPage, "-- PLAYER LIST")
-local playerListFrame = Instance.new("Frame", tPage)
-playerListFrame.Size = UDim2.new(1, 0, 0, 0)
-playerListFrame.BackgroundTransparency = 1
-playerListFrame.AutomaticSize = Enum.AutomaticSize.Y
-
-local plLayout = Instance.new("UIListLayout", playerListFrame)
-plLayout.Padding = UDim.new(0, 4)
-
-local function refreshPlayerList()
-    for _, c in playerListFrame:GetChildren() do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
-    for _, p in Players:GetPlayers() do
-        if p ~= Player then
-            addButton(playerListFrame, "→ " .. p.DisplayName .. " (@" .. p.Name .. ")", function()
-                local hrp = getHRP()
-                local t = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
-                if hrp and t then
-                    hrp.CFrame = t.CFrame * CFrame.new(0, 0, 3)
-                    notify("Teleported", "→ " .. p.DisplayName)
-                end
-            end)
-        end
-    end
-end
-refreshPlayerList()
-
-addButton(tPage, "[*] Refresh Player List", refreshPlayerList)
 
 -- ═══════════════════════════════════════
 -- MOVEMENT TAB
@@ -967,33 +1177,342 @@ addButton(vPage, "Reset FOV", function()
 end)
 
 -- ═══════════════════════════════════════
+-- FREECAM (masuk bagian CAMERA)
+-- ═══════════════════════════════════════
+
+-- ── Freecam HUD (floating panel pojok kanan bawah, muncul saat freecam ON) ──
+local FreecamHUD = Instance.new("Frame", ScreenGui)
+FreecamHUD.Name = "FreecamHUD"
+FreecamHUD.Size = UDim2.new(0, 250, 0, 148)  -- +25%: 200→250, 118→148
+FreecamHUD.Position = UDim2.new(1, -264, 1, -162)
+FreecamHUD.BackgroundColor3 = Color3.fromRGB(13, 13, 20)
+FreecamHUD.BackgroundTransparency = 0.1
+FreecamHUD.BorderSizePixel = 0
+FreecamHUD.Visible = false
+FreecamHUD.ZIndex = 60
+addCorner(FreecamHUD, 14)
+addStroke(FreecamHUD, C.accent, 1.5)
+
+-- Draggable HUD
+do
+    local fDrag, fStart, fPos = false, nil, nil
+    FreecamHUD.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            fDrag = true; fStart = inp.Position; fPos = FreecamHUD.Position
+        end
+    end)
+    UIS.InputChanged:Connect(function(inp)
+        if fDrag and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = inp.Position - fStart
+            FreecamHUD.Position = UDim2.new(fPos.X.Scale, fPos.X.Offset + d.X, fPos.Y.Scale, fPos.Y.Offset + d.Y)
+        end
+    end)
+    UIS.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then fDrag = false end
+    end)
+end
+
+-- Header
+local fcHudTitle = Instance.new("TextLabel", FreecamHUD)
+fcHudTitle.Size = UDim2.new(1, -16, 0, 22)
+fcHudTitle.Position = UDim2.new(0, 12, 0, 10)
+fcHudTitle.BackgroundTransparency = 1
+fcHudTitle.Text = "📷  FREECAM"
+fcHudTitle.TextColor3 = C.accent
+fcHudTitle.Font = Enum.Font.GothamBold
+fcHudTitle.TextSize = 13
+fcHudTitle.TextXAlignment = Enum.TextXAlignment.Left
+fcHudTitle.ZIndex = 61
+
+-- Speed label
+local fcSpeedLabel = Instance.new("TextLabel", FreecamHUD)
+fcSpeedLabel.Size = UDim2.new(0.5, 0, 0, 18)
+fcSpeedLabel.Position = UDim2.new(0, 12, 0, 36)
+fcSpeedLabel.BackgroundTransparency = 1
+fcSpeedLabel.Text = "Speed"
+fcSpeedLabel.TextColor3 = C.textDim
+fcSpeedLabel.Font = Enum.Font.GothamMedium
+fcSpeedLabel.TextSize = 12
+fcSpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+fcSpeedLabel.ZIndex = 61
+
+-- Speed value display
+local fcSpeedValue = Instance.new("TextLabel", FreecamHUD)
+fcSpeedValue.Size = UDim2.new(0.5, -14, 0, 18)
+fcSpeedValue.Position = UDim2.new(0.5, 0, 0, 36)
+fcSpeedValue.BackgroundTransparency = 1
+fcSpeedValue.Text = "1.00"
+fcSpeedValue.TextColor3 = C.text
+fcSpeedValue.Font = Enum.Font.GothamBold
+fcSpeedValue.TextSize = 14
+fcSpeedValue.TextXAlignment = Enum.TextXAlignment.Right
+fcSpeedValue.ZIndex = 61
+
+-- Speed bar track
+local fcTrack = Instance.new("Frame", FreecamHUD)
+fcTrack.Size = UDim2.new(1, -24, 0, 6)
+fcTrack.Position = UDim2.new(0, 12, 0, 60)
+fcTrack.BackgroundColor3 = C.toggleOff
+fcTrack.BorderSizePixel = 0
+fcTrack.ZIndex = 61
+addCorner(fcTrack, 3)
+
+local fcFill = Instance.new("Frame", fcTrack)
+fcFill.Size = UDim2.new(0.05, 0, 1, 0)
+fcFill.BackgroundColor3 = C.accent
+fcFill.BorderSizePixel = 0
+fcFill.ZIndex = 62
+addCorner(fcFill, 3)
+
+-- −/+ tombol speed
+local function makeSpeedBtn(txt, xOff)
+    local b = Instance.new("TextButton", FreecamHUD)
+    b.Size = UDim2.new(0, 34, 0, 30)
+    b.Position = UDim2.new(0, xOff, 0, 74)
+    b.BackgroundColor3 = C.card
+    b.BorderSizePixel = 0
+    b.Text = txt
+    b.TextColor3 = C.text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 16
+    b.ZIndex = 62
+    addCorner(b, 7)
+    b.MouseEnter:Connect(function() tween(b, {BackgroundColor3 = C.accent}, 0.12) end)
+    b.MouseLeave:Connect(function() tween(b, {BackgroundColor3 = C.card}, 0.12) end)
+    return b
+end
+
+local fcMinusBtn = makeSpeedBtn("−", 12)
+local fcPlusBtn  = makeSpeedBtn("+", 204)
+
+-- Manual speed input box (di tengah antara − dan +)
+local fcSpeedInputBg = Instance.new("Frame", FreecamHUD)
+fcSpeedInputBg.Size = UDim2.new(1, -110, 0, 30)
+fcSpeedInputBg.Position = UDim2.new(0, 52, 0, 74)
+fcSpeedInputBg.BackgroundColor3 = C.card
+fcSpeedInputBg.BorderSizePixel = 0
+fcSpeedInputBg.ZIndex = 61
+addCorner(fcSpeedInputBg, 7)
+addStroke(fcSpeedInputBg, C.border, 1)
+
+local fcSpeedInput = Instance.new("TextBox", fcSpeedInputBg)
+fcSpeedInput.Size = UDim2.new(1, -10, 1, 0)
+fcSpeedInput.Position = UDim2.new(0, 5, 0, 0)
+fcSpeedInput.BackgroundTransparency = 1
+fcSpeedInput.Text = "1.00"
+fcSpeedInput.PlaceholderText = "speed"
+fcSpeedInput.PlaceholderColor3 = C.textDim
+fcSpeedInput.TextColor3 = C.text
+fcSpeedInput.Font = Enum.Font.GothamBold
+fcSpeedInput.TextSize = 14
+fcSpeedInput.ClearTextOnFocus = false
+fcSpeedInput.ZIndex = 62
+
+-- Hint text
+local fcHint = Instance.new("TextLabel", FreecamHUD)
+fcHint.Size = UDim2.new(1, -24, 0, 14)
+fcHint.Position = UDim2.new(0, 12, 0, 112)
+fcHint.BackgroundTransparency = 1
+fcHint.Text = "RMB=look · WASD/Space/Shift · Q/E speed"
+fcHint.TextColor3 = C.textDim
+fcHint.Font = Enum.Font.GothamMedium
+fcHint.TextSize = 9
+fcHint.TextXAlignment = Enum.TextXAlignment.Left
+fcHint.ZIndex = 61
+
+-- Stop button — "✕" besar, warna merah jelas
+local fcStopBtn = Instance.new("TextButton", FreecamHUD)
+fcStopBtn.Size = UDim2.new(1, -24, 0, 28)
+fcStopBtn.Position = UDim2.new(0, 12, 1, -34)
+fcStopBtn.BackgroundColor3 = C.red
+fcStopBtn.BackgroundTransparency = 0.2
+fcStopBtn.BorderSizePixel = 0
+fcStopBtn.Text = "✕   Stop Freecam"
+fcStopBtn.TextColor3 = Color3.new(1, 1, 1)
+fcStopBtn.Font = Enum.Font.GothamBold
+fcStopBtn.TextSize = 13
+fcStopBtn.ZIndex = 62
+addCorner(fcStopBtn, 7)
+fcStopBtn.MouseEnter:Connect(function() tween(fcStopBtn, {BackgroundTransparency = 0}, 0.12) end)
+fcStopBtn.MouseLeave:Connect(function() tween(fcStopBtn, {BackgroundTransparency = 0.2}, 0.12) end)
+
+-- Shared speed state - tanpa batas bawah ketat, bisa 0.01
+local freecamSpeedShared = 0.01
+local FC_MAX_SPEED = 200   -- bebas sampai 200
+local FC_MIN_SPEED = 0.01  -- bisa sekecil 0.01
+
+local function setFreecamSpeed(v)
+    local parsed = tonumber(v)
+    if not parsed then return end
+    -- Clamp hanya di atas (jangan negatif/nol) dan batas max
+    freecamSpeedShared = math.clamp(parsed, FC_MIN_SPEED, FC_MAX_SPEED)
+    -- Tampilkan dengan 2 desimal supaya 0.09 keliatan
+    fcSpeedValue.Text = string.format("%.2f", freecamSpeedShared)
+    fcSpeedInput.Text = string.format("%.2f", freecamSpeedShared)
+    -- Fill bar: log scale biar kelihatan di nilai kecil
+    local logRatio = math.log(freecamSpeedShared / FC_MIN_SPEED) / math.log(FC_MAX_SPEED / FC_MIN_SPEED)
+    fcFill.Size = UDim2.new(math.clamp(logRatio, 0, 1), 0, 1, 0)
+end
+
+fcMinusBtn.MouseButton1Click:Connect(function() setFreecamSpeed(freecamSpeedShared - 0.05) end)
+fcPlusBtn.MouseButton1Click:Connect(function()  setFreecamSpeed(freecamSpeedShared + 0.05) end)
+fcSpeedInput.FocusLost:Connect(function() setFreecamSpeed(fcSpeedInput.Text) end)
+
+-- Stop function (dipanggil dari stop btn atau toggle off)
+local freecamToggleState = false
+local freecamSetState = nil  -- akan diisi setelah addToggle freecam dibuat
+
+local function stopFreecam()
+    if not freecamToggleState then return end
+    freecamToggleState = false
+    States.Freecam = false
+
+    if Connections.freecam       then Connections.freecam:Disconnect()       end
+    if Connections.freecamRmb    then Connections.freecamRmb:Disconnect()    end
+    if Connections.freecamRmbEnd then Connections.freecamRmbEnd:Disconnect() end
+
+    UIS.MouseBehavior = Enum.MouseBehavior.Default
+    FreecamHUD.Visible = false
+
+    -- Sinkronkan toggle visual di menu
+    if freecamSetState then freecamSetState(false) end
+
+    local cam = Workspace.CurrentCamera
+    cam.CameraType = Enum.CameraType.Custom
+    cam.CameraSubject = getHum()
+
+    local hrpFC = getHRP()
+    local humFC = getHum()
+    if hrpFC then hrpFC.Anchored = false end
+    if humFC then
+        humFC.WalkSpeed = WalkSpeedVal
+        humFC.JumpPower = JumpPowerVal
+    end
+    notify("Freecam", "OFF")
+end
+
+fcStopBtn.MouseButton1Click:Connect(stopFreecam)
+
+-- Toggle freecam
+local _, fcSetState = addToggle(vPage, "Freecam  (tahan RMB = look)", false, function(on)
+    local cam = Workspace.CurrentCamera
+
+    if on then
+        States.Freecam = true
+        freecamToggleState = true
+        cam.CameraType = Enum.CameraType.Scriptable
+
+        local hrpFC = getHRP()
+        local humFC = getHum()
+        if hrpFC then hrpFC.Anchored = true end
+        if humFC then humFC.WalkSpeed = 0; humFC.JumpPower = 0 end
+
+        local _, yaw, _ = cam.CFrame:ToEulerAnglesYXZ()
+        local freecamYaw   = yaw
+        local freecamPitch = 0
+        local isLooking    = false
+        local eHeld = false
+        local qHeld = false
+
+        Connections.freecamRmb = UIS.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton2 then
+                isLooking = true
+                UIS.MouseBehavior = Enum.MouseBehavior.LockCenter
+            end
+        end)
+        Connections.freecamRmbEnd = UIS.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton2 then
+                isLooking = false
+                UIS.MouseBehavior = Enum.MouseBehavior.Default
+            end
+        end)
+
+        Connections.freecam = RunService.RenderStepped:Connect(function()
+            if not States.Freecam then return end
+
+            if isLooking then
+                local delta = UIS:GetMouseDelta()
+                freecamYaw   = freecamYaw   - delta.X * 0.003
+                freecamPitch = math.clamp(freecamPitch - delta.Y * 0.003, math.rad(-89), math.rad(89))
+            end
+
+            -- E/Q: hanya naik sekali per pencet, bukan tiap frame
+            if UIS:IsKeyDown(Enum.KeyCode.E) then
+                if not eHeld then eHeld = true; setFreecamSpeed(freecamSpeedShared + 0.05) end
+            else eHeld = false end
+            if UIS:IsKeyDown(Enum.KeyCode.Q) then
+                if not qHeld then qHeld = true; setFreecamSpeed(freecamSpeedShared - 0.05) end
+            else qHeld = false end
+
+            local rotCF = CFrame.fromEulerAnglesYXZ(freecamPitch, freecamYaw, 0)
+            local pos   = cam.CFrame.Position
+            local move  = Vector3.new(0, 0, 0)
+
+            if UIS:IsKeyDown(Enum.KeyCode.W)         then move += rotCF.LookVector  end
+            if UIS:IsKeyDown(Enum.KeyCode.S)         then move -= rotCF.LookVector  end
+            if UIS:IsKeyDown(Enum.KeyCode.A)         then move -= rotCF.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D)         then move += rotCF.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.Space)     then move += Vector3.yAxis      end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then move -= Vector3.yAxis      end
+
+            cam.CFrame = CFrame.new(pos + move * freecamSpeedShared) * rotCF
+        end)
+
+        FreecamHUD.Visible = true
+        setFreecamSpeed(0.10)
+        notify("Freecam", "ON  |  RMB = look  |  Q/E = speed")
+    else
+        stopFreecam()
+    end
+end)
+freecamSetState = fcSetState
+
+-- ═══════════════════════════════════════
 -- SPECTATE - redesign: player list + overlay UI
 -- ═══════════════════════════════════════
 addLabel(vPage, "-- SPECTATE PLAYER")
 
--- Overlay UI saat spectating (muncul di pojok bawah kanan)
+-- ── SpectateOverlay: +25% ukuran (270x76 → 338x96) ──
 local SpectateOverlay = Instance.new("Frame", ScreenGui)
 SpectateOverlay.Name = "SpectateOverlay"
-SpectateOverlay.Size = UDim2.new(0, 220, 0, 56)
-SpectateOverlay.Position = UDim2.new(1, -234, 1, -70)
-SpectateOverlay.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-SpectateOverlay.BackgroundTransparency = 0.15
+SpectateOverlay.Size = UDim2.new(0, 338, 0, 96)
+SpectateOverlay.Position = UDim2.new(1, -352, 1, -110)
+SpectateOverlay.BackgroundColor3 = Color3.fromRGB(13, 13, 20)
+SpectateOverlay.BackgroundTransparency = 0.08
 SpectateOverlay.BorderSizePixel = 0
 SpectateOverlay.Visible = false
 SpectateOverlay.ZIndex = 50
-addCorner(SpectateOverlay, 10)
+addCorner(SpectateOverlay, 14)
 addStroke(SpectateOverlay, C.accent, 1.5)
 
--- Dot animasi "live"
+-- Draggable
+do
+    local sDrag = false; local sDragStart; local sDragPos
+    SpectateOverlay.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            sDrag = true; sDragStart = input.Position; sDragPos = SpectateOverlay.Position
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if sDrag and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = input.Position - sDragStart
+            SpectateOverlay.Position = UDim2.new(sDragPos.X.Scale, sDragPos.X.Offset + d.X, sDragPos.Y.Scale, sDragPos.Y.Offset + d.Y)
+        end
+    end)
+    UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then sDrag = false end
+    end)
+end
+
+-- Dot merah blink LIVE
 local SpectDot = Instance.new("Frame", SpectateOverlay)
-SpectDot.Size = UDim2.new(0, 8, 0, 8)
-SpectDot.Position = UDim2.new(0, 12, 0.5, -4)
+SpectDot.Size = UDim2.new(0, 10, 0, 10)
+SpectDot.Position = UDim2.new(0, 14, 0, 16)
 SpectDot.BackgroundColor3 = C.red
 SpectDot.BorderSizePixel = 0
 SpectDot.ZIndex = 51
-addCorner(SpectDot, 4)
+addCorner(SpectDot, 5)
 
--- Blink animasi buat dot
 task.spawn(function()
     while true do
         task.wait(0.7)
@@ -1005,52 +1524,180 @@ task.spawn(function()
     end
 end)
 
-local SpectLabel = Instance.new("TextLabel", SpectateOverlay)
-SpectLabel.Size = UDim2.new(1, -28, 0, 18)
-SpectLabel.Position = UDim2.new(0, 26, 0, 8)
-SpectLabel.BackgroundTransparency = 1
-SpectLabel.Text = "SPECTATING"
-SpectLabel.TextColor3 = C.textDim
-SpectLabel.Font = Enum.Font.GothamBold
-SpectLabel.TextSize = 10
-SpectLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpectLabel.ZIndex = 51
+-- "SPECTATING" label
+local SpectTopLabel = Instance.new("TextLabel", SpectateOverlay)
+SpectTopLabel.Size = UDim2.new(1, -140, 0, 18)
+SpectTopLabel.Position = UDim2.new(0, 32, 0, 10)
+SpectTopLabel.BackgroundTransparency = 1
+SpectTopLabel.Text = "SPECTATING"
+SpectTopLabel.TextColor3 = C.textDim
+SpectTopLabel.Font = Enum.Font.GothamBold
+SpectTopLabel.TextSize = 11
+SpectTopLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpectTopLabel.ZIndex = 51
 
+-- Nama player
 local SpectNameLabel = Instance.new("TextLabel", SpectateOverlay)
-SpectNameLabel.Size = UDim2.new(1, -28, 0, 20)
-SpectNameLabel.Position = UDim2.new(0, 26, 0, 24)
+SpectNameLabel.Size = UDim2.new(1, -145, 0, 26)
+SpectNameLabel.Position = UDim2.new(0, 14, 0, 30)
 SpectNameLabel.BackgroundTransparency = 1
 SpectNameLabel.Text = "—"
 SpectNameLabel.TextColor3 = C.text
 SpectNameLabel.Font = Enum.Font.GothamBold
-SpectNameLabel.TextSize = 14
+SpectNameLabel.TextSize = 18
 SpectNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpectNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 SpectNameLabel.ZIndex = 51
 
-local SpectStopBtn = Instance.new("TextButton", SpectateOverlay)
-SpectStopBtn.Size = UDim2.new(0, 40, 0, 40)
-SpectStopBtn.Position = UDim2.new(1, -50, 0.5, -20)
-SpectStopBtn.BackgroundColor3 = C.red
-SpectStopBtn.BackgroundTransparency = 0.6
-SpectStopBtn.BorderSizePixel = 0
-SpectStopBtn.Text = "✕"
-SpectStopBtn.TextColor3 = C.text
-SpectStopBtn.Font = Enum.Font.GothamBold
-SpectStopBtn.TextSize = 14
-SpectStopBtn.ZIndex = 52
-addCorner(SpectStopBtn, 8)
+-- Counter "@name · 1/5"
+local SpectCounterLabel = Instance.new("TextLabel", SpectateOverlay)
+SpectCounterLabel.Size = UDim2.new(1, -145, 0, 16)
+SpectCounterLabel.Position = UDim2.new(0, 14, 1, -22)
+SpectCounterLabel.BackgroundTransparency = 1
+SpectCounterLabel.Text = ""
+SpectCounterLabel.TextColor3 = C.textDim
+SpectCounterLabel.Font = Enum.Font.GothamMedium
+SpectCounterLabel.TextSize = 11
+SpectCounterLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpectCounterLabel.ZIndex = 51
+
+-- ── Nav panel kanan: ◀  ✕  ▶ (vertikal tengah) ──
+local navFrame = Instance.new("Frame", SpectateOverlay)
+navFrame.Size = UDim2.new(0, 124, 0, 44)
+navFrame.Position = UDim2.new(1, -134, 0.5, -22)
+navFrame.BackgroundTransparency = 1
+navFrame.BorderSizePixel = 0
+navFrame.ZIndex = 51
+
+local function makeNavBtn(parent, txt, xOff, col, zIdx)
+    local b = Instance.new("TextButton", parent)
+    b.Size = UDim2.new(0, 38, 0, 38)
+    b.Position = UDim2.new(0, xOff, 0.5, -19)
+    b.BackgroundColor3 = col or C.card
+    b.BackgroundTransparency = 0.25
+    b.BorderSizePixel = 0
+    b.Text = txt
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 18
+    b.ZIndex = zIdx or 52
+    addCorner(b, 8)
+    b.MouseEnter:Connect(function() tween(b, {BackgroundTransparency = 0}, 0.1) end)
+    b.MouseLeave:Connect(function() tween(b, {BackgroundTransparency = 0.25}, 0.1) end)
+    return b
+end
+
+-- Urutan: ◀  ✕  ▶  (stop di tengah, lebih gampang dijangkau)
+local SpectPrevBtn = makeNavBtn(navFrame, "◀", 0,  C.card)
+local SpectStopBtn = makeNavBtn(navFrame, "✕", 43, C.red)
+local SpectNextBtn = makeNavBtn(navFrame, "▶", 86, C.card)
+
+-- ── Logika list spectate dan navigasi ──
+local spectPlayerListCache = {}   -- list player selain local (urutan stabil)
+local spectCurrentIndex = 1        -- index saat ini di cache
+
+local function getSpectablePlayers()
+    local list = {}
+    for _, p in Players:GetPlayers() do
+        if p ~= Player then table.insert(list, p) end
+    end
+    return list
+end
+
+local function applySpectate(p)
+    if not p then return end
+    if p.Character and p.Character:FindFirstChildOfClass("Humanoid") then
+        States.Spectating = true
+        spectateTarget = p
+        Workspace.CurrentCamera.CameraSubject = p.Character:FindFirstChildOfClass("Humanoid")
+        SpectNameLabel.Text = p.DisplayName
+        -- update counter
+        local total = #spectPlayerListCache
+        local idx = table.find(spectPlayerListCache, p) or spectCurrentIndex
+        SpectCounterLabel.Text = "@" .. p.Name .. "  ·  " .. idx .. " / " .. total
+        SpectateOverlay.Visible = true
+
+        -- Freeze karakter utama (seperti freecam)
+        local hrp = getHRP()
+        local hum = getHum()
+        if hrp then hrp.Anchored = true end
+        if hum then hum.WalkSpeed = 0; hum.JumpPower = 0 end
+
+        -- E/Q untuk pindah spectate target (sekali per pencet)
+        if not Connections.spectateKeys then
+            local seHeld, sqHeld = false, false
+            Connections.spectateKeys = RunService.RenderStepped:Connect(function()
+                if not States.Spectating then return end
+                if UIS:IsKeyDown(Enum.KeyCode.E) then
+                    if not seHeld then
+                        seHeld = true
+                        spectPlayerListCache = getSpectablePlayers()
+                        if #spectPlayerListCache > 0 then
+                            spectCurrentIndex = spectCurrentIndex + 1
+                            if spectCurrentIndex > #spectPlayerListCache then spectCurrentIndex = 1 end
+                            applySpectate(spectPlayerListCache[spectCurrentIndex])
+                        end
+                    end
+                else seHeld = false end
+                if UIS:IsKeyDown(Enum.KeyCode.Q) then
+                    if not sqHeld then
+                        sqHeld = true
+                        spectPlayerListCache = getSpectablePlayers()
+                        if #spectPlayerListCache > 0 then
+                            spectCurrentIndex = spectCurrentIndex - 1
+                            if spectCurrentIndex < 1 then spectCurrentIndex = #spectPlayerListCache end
+                            applySpectate(spectPlayerListCache[spectCurrentIndex])
+                        end
+                    end
+                else sqHeld = false end
+            end)
+        end
+    else
+        notify("Spectate", p.DisplayName .. " has no character")
+    end
+end
 
 local function stopSpectate()
     States.Spectating = false
     spectateTarget = nil
     Workspace.CurrentCamera.CameraSubject = getHum()
     SpectateOverlay.Visible = false
+
+    -- Unfreeze karakter utama
+    local hrp = getHRP()
+    local hum = getHum()
+    if hrp then hrp.Anchored = false end
+    if hum then
+        hum.WalkSpeed = WalkSpeedVal
+        hum.JumpPower = JumpPowerVal
+    end
+
+    -- Disconnect E/Q listener
+    if Connections.spectateKeys then
+        Connections.spectateKeys:Disconnect()
+        Connections.spectateKeys = nil
+    end
+
     notify("Spectate", "Stopped")
 end
 
 SpectStopBtn.MouseButton1Click:Connect(stopSpectate)
-SpectStopBtn.MouseEnter:Connect(function() tween(SpectStopBtn, {BackgroundTransparency = 0.2}, 0.15) end)
-SpectStopBtn.MouseLeave:Connect(function() tween(SpectStopBtn, {BackgroundTransparency = 0.6}, 0.15) end)
+
+SpectPrevBtn.MouseButton1Click:Connect(function()
+    spectPlayerListCache = getSpectablePlayers()
+    if #spectPlayerListCache == 0 then return end
+    spectCurrentIndex = spectCurrentIndex - 1
+    if spectCurrentIndex < 1 then spectCurrentIndex = #spectPlayerListCache end
+    applySpectate(spectPlayerListCache[spectCurrentIndex])
+end)
+
+SpectNextBtn.MouseButton1Click:Connect(function()
+    spectPlayerListCache = getSpectablePlayers()
+    if #spectPlayerListCache == 0 then return end
+    spectCurrentIndex = spectCurrentIndex + 1
+    if spectCurrentIndex > #spectPlayerListCache then spectCurrentIndex = 1 end
+    applySpectate(spectPlayerListCache[spectCurrentIndex])
+end)
 
 -- Player list untuk spectate (di dalam Visual tab)
 local spectListContainer = Instance.new("Frame", vPage)
@@ -1065,26 +1712,20 @@ local function refreshSpectList()
     for _, c in spectListContainer:GetChildren() do
         if c:IsA("TextButton") then c:Destroy() end
     end
-    for _, p in Players:GetPlayers() do
-        if p ~= Player then
-            local btn = addButton(spectListContainer,
-                "👁  " .. p.DisplayName .. " (@" .. p.Name .. ")",
-                function()
-                    if p.Character and p.Character:FindFirstChildOfClass("Humanoid") then
-                        States.Spectating = true
-                        spectateTarget = p
-                        Workspace.CurrentCamera.CameraSubject = p.Character:FindFirstChildOfClass("Humanoid")
-                        SpectNameLabel.Text = p.DisplayName .. " (@" .. p.Name .. ")"
-                        SpectateOverlay.Visible = true
-                        notify("Spectate", "👁 Watching: " .. p.DisplayName)
-                    else
-                        notify("Spectate", p.DisplayName .. " has no character")
-                    end
+    spectPlayerListCache = getSpectablePlayers()
+    for i, p in ipairs(spectPlayerListCache) do
+        local btn = addButton(spectListContainer,
+            "👁  " .. p.DisplayName .. " (@" .. p.Name .. ")",
+            function()
+                spectCurrentIndex = i
+                applySpectate(p)
+                if States.Spectating then
+                    notify("Spectate", "👁 Watching: " .. p.DisplayName)
                 end
-            )
-        end
+            end
+        )
     end
-    if #spectListContainer:GetChildren() <= 1 then -- hanya layout
+    if #spectPlayerListCache == 0 then
         local noOne = Instance.new("TextLabel", spectListContainer)
         noOne.Size = UDim2.new(1, 0, 0, 30)
         noOne.BackgroundTransparency = 1
@@ -1099,61 +1740,6 @@ refreshSpectList()
 addButton(vPage, "[*] Refresh Spectate List", refreshSpectList)
 
 addButton(vPage, "[X] Stop Spectate", stopSpectate)
-
--- ═══════════════════════════════════════
--- FIX: FREECAM - freeze character saat aktif
--- ═══════════════════════════════════════
-addLabel(vPage, "-- FREECAM")
-
-addToggle(vPage, "Freecam", false, function(on)
-    States.Freecam = on
-    local cam = Workspace.CurrentCamera
-
-    if on then
-        freecamPos = cam.CFrame
-        cam.CameraType = Enum.CameraType.Scriptable
-
-        -- FREEZE karakter: anchor HRP supaya gak kemana-mana
-        local hrpFC = getHRP()
-        local humFC = getHum()
-        if hrpFC then hrpFC.Anchored = true end
-        if humFC then
-            humFC.WalkSpeed = 0
-            humFC.JumpPower = 0
-        end
-
-        local freecamSpeed = 1
-
-        Connections.freecam = RunService.RenderStepped:Connect(function(dt)
-            if not States.Freecam then return end
-            local move = Vector3.new(0, 0, 0)
-            if UIS:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
-            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
-            if UIS:IsKeyDown(Enum.KeyCode.E) then freecamSpeed = math.min(freecamSpeed + 0.08, 10) end
-            if UIS:IsKeyDown(Enum.KeyCode.Q) then freecamSpeed = math.max(freecamSpeed - 0.08, 0.1) end
-            cam.CFrame = cam.CFrame + move * freecamSpeed
-        end)
-        notify("Freecam", "ON - WASD/Space/Shift | Q/E speed | karakter diam")
-    else
-        if Connections.freecam then Connections.freecam:Disconnect() end
-        cam.CameraType = Enum.CameraType.Custom
-        cam.CameraSubject = getHum()
-
-        -- UNFREEZE karakter
-        local hrpFC = getHRP()
-        local humFC = getHum()
-        if hrpFC then hrpFC.Anchored = false end
-        if humFC then
-            humFC.WalkSpeed = WalkSpeedVal
-            humFC.JumpPower = JumpPowerVal
-        end
-        notify("Freecam", "Disabled - karakter unfrozen")
-    end
-end)
 
 -- Locate Player
 addLabel(vPage, "-- LOCATE PLAYER")
@@ -1906,6 +2492,71 @@ end)
 
 addLabel(miscPage, "-- KEYBIND")
 
+-- ── PC MODE SETTING ──
+-- Di PC biasanya gak perlu MiniBtn "P" yang muncul saat minimize
+
+local pcModeCard = Instance.new("Frame", miscPage)
+pcModeCard.Size = UDim2.new(1, 0, 0, 52)
+pcModeCard.BackgroundColor3 = C.card
+pcModeCard.BorderSizePixel = 0
+addCorner(pcModeCard, 8)
+addStroke(pcModeCard, C.border, 1)
+
+local pcModeTop = Instance.new("TextLabel", pcModeCard)
+pcModeTop.Size = UDim2.new(1, -60, 0, 20)
+pcModeTop.Position = UDim2.new(0, 12, 0, 4)
+pcModeTop.BackgroundTransparency = 1
+pcModeTop.Text = "PC Mode  (disable tombol P)"
+pcModeTop.TextColor3 = C.text
+pcModeTop.Font = Enum.Font.GothamBold
+pcModeTop.TextSize = 12
+pcModeTop.TextXAlignment = Enum.TextXAlignment.Left
+
+local pcModeSub = Instance.new("TextLabel", pcModeCard)
+pcModeSub.Size = UDim2.new(1, -60, 0, 16)
+pcModeSub.Position = UDim2.new(0, 12, 0, 24)
+pcModeSub.BackgroundTransparency = 1
+pcModeSub.Text = "Sembunyikan floating P button saat minimize"
+pcModeSub.TextColor3 = C.textDim
+pcModeSub.Font = Enum.Font.GothamMedium
+pcModeSub.TextSize = 10
+pcModeSub.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Toggle visual untuk PC Mode
+local pcTogBg = Instance.new("Frame", pcModeCard)
+pcTogBg.Size = UDim2.new(0, 40, 0, 20)
+pcTogBg.Position = UDim2.new(1, -52, 0.5, -10)
+pcTogBg.BackgroundColor3 = C.toggleOff
+pcTogBg.BorderSizePixel = 0
+addCorner(pcTogBg, 10)
+
+local pcTogCircle = Instance.new("Frame", pcTogBg)
+pcTogCircle.Size = UDim2.new(0, 16, 0, 16)
+pcTogCircle.Position = UDim2.new(0, 2, 0, 2)
+pcTogCircle.BackgroundColor3 = C.text
+pcTogCircle.BorderSizePixel = 0
+addCorner(pcTogCircle, 8)
+
+local pcTogBtn = Instance.new("TextButton", pcModeCard)
+pcTogBtn.Size = UDim2.new(1, 0, 1, 0)
+pcTogBtn.BackgroundTransparency = 1
+pcTogBtn.Text = ""
+pcTogBtn.ZIndex = 5
+
+pcTogBtn.MouseButton1Click:Connect(function()
+    pcModeEnabled = not pcModeEnabled
+    tween(pcTogBg, {BackgroundColor3 = pcModeEnabled and C.green or C.toggleOff}, 0.2)
+    tween(pcTogCircle, {Position = pcModeEnabled and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2)}, 0.2)
+    -- Kalau PC Mode aktif: sembunyikan MiniBtn
+    -- MiniBtn sudah ada tapi belum visible - logic-nya di MinBtn click dan di toggle key
+    if pcModeEnabled then
+        MiniBtn.Visible = false  -- hide seketika jika lagi visible
+        notify("PC Mode", "ON — Tombol P disembunyikan. Gunakan " .. tostring(currentToggleKey.Name) .. " untuk toggle.")
+    else
+        notify("PC Mode", "OFF — Tombol P aktif kembali saat minimize.")
+    end
+end)
+
 local keyBindBtn = addButton(miscPage, "Toggle Key: RightControl", function() end)
 keyBindBtn.TextColor3 = C.textDim
 
@@ -1941,7 +2592,8 @@ addButton(miscPage, "Player: " .. Player.DisplayName .. " (@" .. Player.Name .. 
 -- ═══════════════════════════════════════
 -- TOGGLE KEY (Custom Keybind)
 -- ═══════════════════════════════════════
-local toggleCooldown = false
+-- TOGGLE KEY (Custom Keybind) - no delay
+-- ═══════════════════════════════════════
 local toggleKeyDown = false
 
 UIS.InputBegan:Connect(function(input, gpe)
@@ -1955,11 +2607,9 @@ UIS.InputBegan:Connect(function(input, gpe)
     end
     if gpe then return end
     if (input.KeyCode == currentToggleKey or input.KeyCode == Enum.KeyCode.Insert) then
-        if not toggleKeyDown and not toggleCooldown then
+        if not toggleKeyDown then
             toggleKeyDown = true
-            toggleCooldown = true
             if minimized then
-                -- Kalau lagi minimize, munculkan lagi
                 minimized = false
                 MiniBtn.Visible = false
                 Main.Size = UDim2.new(0, 520, 0, 380)
@@ -1968,7 +2618,6 @@ UIS.InputBegan:Connect(function(input, gpe)
             else
                 Main.Visible = not Main.Visible
             end
-            task.delay(0.5, function() toggleCooldown = false end)
         end
     end
 end)
@@ -1984,4 +2633,4 @@ end)
 -- ═══════════════════════════════════════
 Main.BackgroundTransparency = 0
 Main.Size = UDim2.new(0, 520, 0, 380)
-notify("VelxHub v1.1", "Loaded! RCtrl/Insert toggle | Bug fixes applied ✅")
+notify("VelxHub v1.5", "TP text lebih besar · Speed bebas · HUD +25% · ✕ stop ✅")
