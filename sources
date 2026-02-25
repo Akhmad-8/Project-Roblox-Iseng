@@ -77,6 +77,16 @@ local C = {
     toggleOff = Color3.fromRGB(55, 55, 70),
 }
 
+local function notify(title, text)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 3,
+        })
+    end)
+end
+
 local function tween(obj, props, dur)
     TweenService:Create(obj, TweenInfo.new(dur or 0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
 end
@@ -721,15 +731,6 @@ local function getHum()
     return c and c:FindFirstChildOfClass("Humanoid")
 end
 
-local function notify(title, text)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = 3,
-        })
-    end)
-end
 
 -- ═══════════════════════════════════════
 -- PLAYER TAB
@@ -2632,63 +2633,63 @@ addButton(miscPage, "Player: " .. Player.DisplayName .. " (@" .. Player.Name .. 
 -- ═══════════════════════════════════════
 local kataPage = Pages["Kata"]
 
--- Load module & remotes
-local kataModule = nil
-local kataRemotes = {}
-local kataReady = false
-
-pcall(function()
-    local RS = game:GetService("ReplicatedStorage")
-    local wordList = RS:FindFirstChild("WordList")
-    if wordList then
-        kataModule = require(wordList:WaitForChild("IndonesianWords"))
-        local remotes = RS:WaitForChild("Remotes")
-        kataRemotes.MatchUI         = remotes:WaitForChild("MatchUI")
-        kataRemotes.SubmitWord      = remotes:WaitForChild("SubmitWord")
-        kataRemotes.BillboardUpdate = remotes:WaitForChild("BillboardUpdate")
-        kataRemotes.BillboardEnd    = remotes:WaitForChild("BillboardEnd")
-        kataRemotes.TypeSound       = remotes:WaitForChild("TypeSound")
-        kataRemotes.UsedWordWarn    = remotes:WaitForChild("UsedWordWarn")
-        kataReady = true
-    end
-end)
-
--- State
+-- STATE
 local kataMatchActive  = false
 local kataIsMyTurn     = false
 local kataServerLetter = ""
-local kataUsedWords    = {}
 local kataAutoEnabled  = false
 local kataAutoRunning  = false
 local kataOpponentWord = ""
 
+local kataUsedWords    = {}
+local kataUsedList     = {}
+
 local kataCfg = {
-    minDelay   = 2000,
-    maxDelay   = 8000,
-    aggression = 50,
-    minLength  = 3,
-    maxLength  = 20,
+    minDelay   = 350,
+    maxDelay   = 650,
+    aggression = 20,
+    minLength  = 2,
+    maxLength  = 12,
 }
 
--- Helpers
+-- WORDLIST (download dari GitHub, sama kayak script baru)
+local kataModule = {}
+local kataReady  = false
+
+-- HELPERS
 local function kataIsUsed(word)
     return kataUsedWords[string.lower(word)] == true
 end
 
 local function kataAddUsed(word)
-    kataUsedWords[string.lower(word)] = true
+    local w = string.lower(word)
+    if not kataUsedWords[w] then
+        kataUsedWords[w] = true
+        table.insert(kataUsedList, word)
+    end
+end
+
+local function kataResetUsed()
+    kataUsedWords = {}
+    kataUsedList  = {}
+end
+
+local function kataHumanDelay()
+    local mn = math.min(kataCfg.minDelay, kataCfg.maxDelay)
+    local mx = math.max(kataCfg.minDelay, kataCfg.maxDelay)
+    task.wait(math.random(mn, mx) / 1000)
 end
 
 local function kataGetWords(prefix)
-    prefix = string.lower(prefix)
     local results = {}
-    for _, word in ipairs(kataModule) do
-        local w = tostring(word)
-        if string.sub(string.lower(w), 1, #prefix) == prefix then
-            if not kataIsUsed(w) then
-                local len = #w
+    local lp = string.lower(prefix)
+    for i = 1, #kataModule do
+        local word = kataModule[i]
+        if string.sub(word, 1, #lp) == lp then
+            if not kataIsUsed(word) then
+                local len = #word
                 if len >= kataCfg.minLength and len <= kataCfg.maxLength then
-                    table.insert(results, w)
+                    table.insert(results, word)
                 end
             end
         end
@@ -2697,41 +2698,7 @@ local function kataGetWords(prefix)
     return results
 end
 
--- Delay: jeda panjang di awal (kayak lagi mikir)
-local function kataThinkDelay()
-    local mn = math.min(kataCfg.minDelay, kataCfg.maxDelay)
-    local mx = math.max(kataCfg.minDelay, kataCfg.maxDelay)
-    task.wait(math.random(mn, mx) / 1000)
-end
-
--- Delay: ngetik per huruf, super random biar kayak manusia beneran
-local function kataCharDelay()
-    local roll = math.random(1, 100)
-    if roll <= 5 then
-        -- Jeda panjang banget: kayak kefikiran kata lain / distracted
-        task.wait(math.random(800, 1800) / 1000)
-    elseif roll <= 14 then
-        -- Jeda lumayan: kayak salah tekan terus dipikir lagi
-        task.wait(math.random(400, 750) / 1000)
-    elseif roll <= 28 then
-        -- Lambat: lagi ragu huruf berikutnya
-        task.wait(math.random(200, 380) / 1000)
-    elseif roll <= 50 then
-        -- Normal santai
-        task.wait(math.random(100, 190) / 1000)
-    elseif roll <= 75 then
-        -- Agak cepet
-        task.wait(math.random(60, 110) / 1000)
-    elseif roll <= 90 then
-        -- Cepet
-        task.wait(math.random(35, 65) / 1000)
-    else
-        -- Burst cepet banget (kayak lagi on fire ngetiknya)
-        task.wait(math.random(15, 35) / 1000)
-    end
-end
-
--- Auto Engine
+-- AUTO ENGINE (flat, no task.spawn - sama kayak script baru)
 local function kataStartAI()
     if kataAutoRunning then return end
     if not kataAutoEnabled then return end
@@ -2741,121 +2708,57 @@ local function kataStartAI()
 
     kataAutoRunning = true
 
-    task.spawn(function()
-        -- Jeda awal: kayak lagi mikir kata (2-5 detik)
-        kataThinkDelay()
+    kataHumanDelay()
 
-        local words = kataGetWords(kataServerLetter)
-        if #words == 0 then
-            kataAutoRunning = false
-            return
-        end
-
-        -- Pilih kata berdasarkan aggression
-        local selectedWord
-        if kataCfg.aggression >= 100 then
-            selectedWord = words[1]
-        elseif kataCfg.aggression <= 0 then
-            selectedWord = words[math.random(1, #words)]
-        else
-            local topN = math.max(1, math.floor(#words * (1 - kataCfg.aggression / 100)))
-            topN = math.min(topN, #words)
-            selectedWord = words[math.random(1, topN)]
-        end
-
-        if not selectedWord then
-            kataAutoRunning = false
-            return
-        end
-
-        local currentWord = kataServerLetter
-        local remain = selectedWord:sub(#kataServerLetter + 1)
-
-        -- Ngetik pelan-pelan per huruf
-        for i = 1, #remain do
-            if not kataMatchActive or not kataIsMyTurn then
-                kataAutoRunning = false
-                return
-            end
-
-            currentWord = currentWord .. remain:sub(i, i)
-            kataRemotes.TypeSound:FireServer()
-            kataRemotes.BillboardUpdate:FireServer(currentWord)
-
-            -- Delay random per karakter (human-like)
-            kataCharDelay()
-
-            -- Sesekali pause di tengah kata (kayak ragu / mau ganti kata)
-            if math.random(1, 6) == 1 then
-                task.wait(math.random(250, 900) / 1000)
-            end
-        end
-
-        -- Jeda kecil sebelum submit (kayak baca ulang)
-        task.wait(math.random(100, 350) / 1000)
-
-        kataRemotes.SubmitWord:FireServer(selectedWord)
-        kataAddUsed(selectedWord)
-
-        task.wait(math.random(80, 200) / 1000)
-        kataRemotes.BillboardEnd:FireServer()
-
+    -- Cek ulang setelah delay
+    if not kataMatchActive or not kataIsMyTurn or kataServerLetter == "" then
         kataAutoRunning = false
-    end)
+        return
+    end
+
+    local words = kataGetWords(kataServerLetter)
+    if #words == 0 then
+        kataAutoRunning = false
+        return
+    end
+
+    local selectedWord = words[1]
+    if kataCfg.aggression < 100 then
+        local topN = math.floor(#words * (1 - kataCfg.aggression / 100))
+        if topN < 1 then topN = 1 end
+        if topN > #words then topN = #words end
+        selectedWord = words[math.random(1, topN)]
+    end
+
+    local currentWord = kataServerLetter
+    local remain = string.sub(selectedWord, #kataServerLetter + 1)
+
+    for i = 1, #remain do
+        if not kataMatchActive or not kataIsMyTurn then
+            kataAutoRunning = false
+            return
+        end
+        currentWord = currentWord .. string.sub(remain, i, i)
+        kataRemotes.TypeSound:FireServer()
+        kataRemotes.BillboardUpdate:FireServer(currentWord)
+        kataHumanDelay()
+    end
+
+    kataHumanDelay()
+
+    kataRemotes.SubmitWord:FireServer(selectedWord)
+    kataAddUsed(selectedWord)
+
+    kataHumanDelay()
+    kataRemotes.BillboardEnd:FireServer()
+
+    kataAutoRunning = false
 end
 
--- UI
-addLabel(kataPage, "-- AUTO SAMBUNG KATA")
+-- REMOTES
+local kataRemotes = {}
 
-if not kataReady then
-    local warnCard = Instance.new("Frame", kataPage)
-    warnCard.Size = UDim2.new(1, 0, 0, 44)
-    warnCard.BackgroundColor3 = Color3.fromRGB(60, 18, 18)
-    warnCard.BorderSizePixel = 0
-    addCorner(warnCard, 8)
-    addStroke(warnCard, C.red, 1)
-    local warnLbl = Instance.new("TextLabel", warnCard)
-    warnLbl.Size = UDim2.new(1, -16, 1, 0)
-    warnLbl.Position = UDim2.new(0, 10, 0, 0)
-    warnLbl.BackgroundTransparency = 1
-    warnLbl.Text = "⚠️  Bukan game Sambung Kata! WordList tidak ditemukan."
-    warnLbl.TextColor3 = C.red
-    warnLbl.Font = Enum.Font.GothamBold
-    warnLbl.TextSize = 11
-    warnLbl.TextXAlignment = Enum.TextXAlignment.Left
-    warnLbl.TextWrapped = true
-end
-
-addToggle(kataPage, "Aktifkan Auto", false, function(on)
-    kataAutoEnabled = on
-    if on then kataStartAI() end
-end)
-
-addLabel(kataPage, "-- DELAY SETTINGS")
-
-addSlider(kataPage, "Min Think Delay (ms)", 500, 5000, kataCfg.minDelay, function(v)
-    kataCfg.minDelay = v
-end)
-
-addSlider(kataPage, "Max Think Delay (ms)", 1000, 12000, kataCfg.maxDelay, function(v)
-    kataCfg.maxDelay = v
-end)
-
-addLabel(kataPage, "-- WORD SETTINGS")
-
-addSlider(kataPage, "Aggression (0=random, 100=longest)", 0, 100, kataCfg.aggression, function(v)
-    kataCfg.aggression = v
-end)
-
-addSlider(kataPage, "Min Word Length", 1, 10, kataCfg.minLength, function(v)
-    kataCfg.minLength = v
-end)
-
-addSlider(kataPage, "Max Word Length", 5, 30, kataCfg.maxLength, function(v)
-    kataCfg.maxLength = v
-end)
-
--- Status card
+-- STATUS UI
 local kataStatusCard = Instance.new("Frame", kataPage)
 kataStatusCard.Size = UDim2.new(1, 0, 0, 52)
 kataStatusCard.BackgroundColor3 = C.card
@@ -2867,43 +2770,98 @@ local kataStatusLbl = Instance.new("TextLabel", kataStatusCard)
 kataStatusLbl.Size = UDim2.new(1, -16, 1, 0)
 kataStatusLbl.Position = UDim2.new(0, 10, 0, 0)
 kataStatusLbl.BackgroundTransparency = 1
-kataStatusLbl.Text = "Status: Idle\nMatch: false | Turn: - | Start: -"
+kataStatusLbl.Text = "Memuat wordlist..."
 kataStatusLbl.TextColor3 = C.textDim
 kataStatusLbl.Font = Enum.Font.GothamMedium
 kataStatusLbl.TextSize = 11
 kataStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 kataStatusLbl.TextYAlignment = Enum.TextYAlignment.Center
+kataStatusLbl.TextWrapped = true
 
 local function updateKataStatus()
     kataStatusLbl.Text = string.format(
         "Match: %s  |  Turn: %s  |  Start: '%s'",
         tostring(kataMatchActive),
-        kataIsMyTurn and "🟢 You" or "⏳ Opponent",
+        kataIsMyTurn and "🟢 Kamu" or "⏳ Lawan",
         kataServerLetter
     )
 end
 
--- Remote Events (hanya kalau kataReady)
-if kataReady then
+-- UI CONTROLS
+addLabel(kataPage, "-- AUTO SAMBUNG KATA")
+
+addToggle(kataPage, "Aktifkan Auto", false, function(on)
+    kataAutoEnabled = on
+    if on then
+        task.spawn(kataStartAI)
+    end
+end)
+
+addLabel(kataPage, "-- DELAY SETTINGS")
+
+addSlider(kataPage, "Min Delay (ms)", 100, 10000, kataCfg.minDelay, function(v)
+    kataCfg.minDelay = v
+end)
+
+addSlider(kataPage, "Max Delay (ms)", 200, 12000, kataCfg.maxDelay, function(v)
+    kataCfg.maxDelay = v
+end)
+
+addLabel(kataPage, "-- WORD SETTINGS")
+
+addSlider(kataPage, "Aggression (0=random, 100=terpanjang)", 0, 100, kataCfg.aggression, function(v)
+    kataCfg.aggression = v
+end)
+
+addSlider(kataPage, "Min Word Length", 1, 10, kataCfg.minLength, function(v)
+    kataCfg.minLength = v
+end)
+
+addSlider(kataPage, "Max Word Length", 5, 30, kataCfg.maxLength, function(v)
+    kataCfg.maxLength = v
+end)
+
+-- REMOTE EVENTS
+local function kataSetupListeners()
     kataRemotes.MatchUI.OnClientEvent:Connect(function(cmd, value)
         if cmd == "ShowMatchUI" then
             kataMatchActive = true
             kataIsMyTurn = false
-            kataUsedWords = {}
+            kataResetUsed()
+
         elseif cmd == "HideMatchUI" then
             kataMatchActive = false
             kataIsMyTurn = false
             kataServerLetter = ""
-            kataUsedWords = {}
+            kataAutoRunning = false
+            kataResetUsed()
+
         elseif cmd == "StartTurn" then
             if kataOpponentWord ~= "" then
                 kataAddUsed(kataOpponentWord)
                 kataOpponentWord = ""
             end
             kataIsMyTurn = true
-            if kataAutoEnabled then kataStartAI() end
+
+            if kataServerLetter == "" then
+                task.spawn(function()
+                    local waited = 0
+                    while kataServerLetter == "" and waited < 3 do
+                        task.wait(0.05)
+                        waited += 0.05
+                    end
+                    if kataAutoEnabled and kataIsMyTurn then
+                        task.spawn(kataStartAI)
+                    end
+                end)
+            else
+                if kataAutoEnabled then task.spawn(kataStartAI) end
+            end
+
         elseif cmd == "EndTurn" then
             kataIsMyTurn = false
+            kataAutoRunning = false
+
         elseif cmd == "UpdateServerLetter" then
             kataServerLetter = value or ""
         end
@@ -2920,12 +2878,79 @@ if kataReady then
         if word then
             kataAddUsed(word)
             if kataAutoEnabled and kataMatchActive and kataIsMyTurn then
-                task.wait(math.random(200, 600) / 1000)
-                kataStartAI()
+                task.spawn(kataStartAI)
             end
         end
     end)
 end
+
+-- LOAD WORDLIST DARI GITHUB (cara baru)
+task.spawn(function()
+    local RS = game:GetService("ReplicatedStorage")
+
+    kataStatusLbl.Text = "⏳ Mengunduh wordlist..."
+    kataStatusLbl.TextColor3 = C.orange
+
+    local ok, response = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/danzzy1we/roblox-script-dump/refs/heads/main/WordListDump/Dump_IndonesianWords.lua")
+    end)
+
+    if not ok or not response then
+        -- Fallback: coba dari ReplicatedStorage
+        local wordList = RS:WaitForChild("WordList", 15)
+        if wordList then
+            local ok2, result = pcall(function()
+                return require(wordList:WaitForChild("IndonesianWords"))
+            end)
+            if ok2 and type(result) == "table" then
+                kataModule = result
+            end
+        end
+    else
+        -- Parse dari GitHub
+        local content = string.match(response, "return%s*(.+)")
+        if content then
+            content = string.gsub(content, "^%s*{", "")
+            content = string.gsub(content, "}%s*$", "")
+            for word in string.gmatch(content, '"([^"]+)"') do
+                local w = string.lower(word)
+                if #w > 1 then table.insert(kataModule, w) end
+            end
+        end
+    end
+
+    if #kataModule == 0 then
+        kataStatusLbl.Text = "❌ Wordlist gagal dimuat!"
+        kataStatusLbl.TextColor3 = C.red
+        return
+    end
+
+    -- Load remotes
+    local remotes = RS:WaitForChild("Remotes", 10)
+    if not remotes then
+        kataStatusLbl.Text = "❌ Remotes tidak ditemukan!"
+        kataStatusLbl.TextColor3 = C.red
+        return
+    end
+
+    local remoteNames = {"MatchUI","SubmitWord","BillboardUpdate","BillboardEnd","TypeSound","UsedWordWarn"}
+    for _, name in ipairs(remoteNames) do
+        local r = remotes:WaitForChild(name, 10)
+        if not r then
+            kataStatusLbl.Text = "❌ Remote '" .. name .. "' tidak ada"
+            kataStatusLbl.TextColor3 = C.red
+            return
+        end
+        kataRemotes[name] = r
+    end
+
+    kataReady = true
+    notify("Kata", "✅ Siap! " .. #kataModule .. " kata dimuat")
+    kataStatusLbl.Text = "✅ " .. #kataModule .. " kata | Match: false | Turn: -"
+    kataStatusLbl.TextColor3 = C.green
+    kataSetupListeners()
+end)
+
 
 -- ═══════════════════════════════════════
 -- TOGGLE KEY (Custom Keybind)
