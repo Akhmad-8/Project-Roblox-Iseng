@@ -2664,7 +2664,7 @@ local kataOpponentWord = ""
 
 local kataCfg = {
     minDelay   = 2000,
-    maxDelay   = 5000,
+    maxDelay   = 8000,
     aggression = 50,
     minLength  = 3,
     maxLength  = 20,
@@ -2704,17 +2704,30 @@ local function kataThinkDelay()
     task.wait(math.random(mn, mx) / 1000)
 end
 
--- Delay: ngetik per huruf, pelan-pelan natural
+-- Delay: ngetik per huruf, super random biar kayak manusia beneran
 local function kataCharDelay()
     local roll = math.random(1, 100)
-    if roll <= 8 then
-        task.wait(math.random(500, 900) / 1000)   -- jeda panjang (kayak salah tekan / ragu)
-    elseif roll <= 25 then
-        task.wait(math.random(180, 320) / 1000)   -- agak lambat
-    elseif roll <= 55 then
-        task.wait(math.random(80, 150) / 1000)    -- kecepatan normal
+    if roll <= 5 then
+        -- Jeda panjang banget: kayak kefikiran kata lain / distracted
+        task.wait(math.random(800, 1800) / 1000)
+    elseif roll <= 14 then
+        -- Jeda lumayan: kayak salah tekan terus dipikir lagi
+        task.wait(math.random(400, 750) / 1000)
+    elseif roll <= 28 then
+        -- Lambat: lagi ragu huruf berikutnya
+        task.wait(math.random(200, 380) / 1000)
+    elseif roll <= 50 then
+        -- Normal santai
+        task.wait(math.random(100, 190) / 1000)
+    elseif roll <= 75 then
+        -- Agak cepet
+        task.wait(math.random(60, 110) / 1000)
+    elseif roll <= 90 then
+        -- Cepet
+        task.wait(math.random(35, 65) / 1000)
     else
-        task.wait(math.random(40, 80) / 1000)     -- cepet sebentar
+        -- Burst cepet banget (kayak lagi on fire ngetiknya)
+        task.wait(math.random(15, 35) / 1000)
     end
 end
 
@@ -2772,9 +2785,9 @@ local function kataStartAI()
             -- Delay random per karakter (human-like)
             kataCharDelay()
 
-            -- Sesekali pause lebih lama di tengah kata (kayak ragu/salah)
-            if math.random(1, 7) == 1 then
-                task.wait(math.random(300, 600) / 1000)
+            -- Sesekali pause di tengah kata (kayak ragu / mau ganti kata)
+            if math.random(1, 6) == 1 then
+                task.wait(math.random(250, 900) / 1000)
             end
         end
 
@@ -2824,7 +2837,7 @@ addSlider(kataPage, "Min Think Delay (ms)", 500, 5000, kataCfg.minDelay, functio
     kataCfg.minDelay = v
 end)
 
-addSlider(kataPage, "Max Think Delay (ms)", 1000, 8000, kataCfg.maxDelay, function(v)
+addSlider(kataPage, "Max Think Delay (ms)", 1000, 12000, kataCfg.maxDelay, function(v)
     kataCfg.maxDelay = v
 end)
 
