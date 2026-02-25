@@ -43,7 +43,7 @@ local isBindingKey = false
 -- UI LIBRARY
 -- ═══════════════════════════════════════
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "VelxHub Premium Universal Script"
+ScreenGui.Name = "Lan Premium Script"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
@@ -2742,4 +2742,4 @@ end)
 -- ═══════════════════════════════════════
 Main.BackgroundTransparency = 0
 Main.Size = UDim2.new(0, 520, 0, 380)
-notify("VelxHub v1.5", "Tombol leftCtrl untuk toggle")
+notify("Lan v1.5", "Script Created by Lan")
