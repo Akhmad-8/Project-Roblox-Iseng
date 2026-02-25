@@ -36,7 +36,7 @@ local WalkSpeedVal = 16
 local JumpPowerVal = 50
 local Connections = {}
 local flyBody = {}
-local currentToggleKey = Enum.KeyCode.RightControl
+local currentToggleKey = Enum.KeyCode.LeftControl
 local isBindingKey = false
 
 -- ═══════════════════════════════════════
@@ -253,12 +253,15 @@ do
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
             if mbDown and not mbDragging then
-                -- Ini klik beneran, bukan drag → restore UI
-                minimized = false
-                MiniBtn.Visible = false
-                Main.Size = UDim2.new(0, 520, 0, 380)
-                Main.BackgroundTransparency = 0
-                Main.Visible = true
+                -- Klik P = toggle menu (P tetap visible)
+                if Main.Visible then
+                    Main.Visible = false
+                else
+                    minimized = false
+                    Main.Size = UDim2.new(0, 520, 0, 380)
+                    Main.BackgroundTransparency = 0
+                    Main.Visible = true
+                end
             end
             mbDown = false
             mbDragging = false
@@ -270,11 +273,88 @@ end
 MiniBtn.MouseEnter:Connect(function() tween(MiniBtn, {BackgroundColor3 = C.accentHover}, 0.15) end)
 MiniBtn.MouseLeave:Connect(function() tween(MiniBtn, {BackgroundColor3 = C.accent}, 0.15) end)
 
+-- ── Close Confirmation Dialog ──
+local ConfirmOverlay = Instance.new("Frame", ScreenGui)
+ConfirmOverlay.Size = UDim2.new(1, 0, 1, 0)
+ConfirmOverlay.Position = UDim2.new(0, 0, 0, 0)
+ConfirmOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
+ConfirmOverlay.BackgroundTransparency = 0.5
+ConfirmOverlay.BorderSizePixel = 0
+ConfirmOverlay.Visible = false
+ConfirmOverlay.ZIndex = 100
+
+local ConfirmBox = Instance.new("Frame", ConfirmOverlay)
+ConfirmBox.Size = UDim2.new(0, 280, 0, 130)
+ConfirmBox.Position = UDim2.new(0.5, -140, 0.5, -65)
+ConfirmBox.BackgroundColor3 = C.card
+ConfirmBox.BorderSizePixel = 0
+ConfirmBox.ZIndex = 101
+addCorner(ConfirmBox, 12)
+addStroke(ConfirmBox, C.accent, 1.5)
+
+local ConfirmTitle = Instance.new("TextLabel", ConfirmBox)
+ConfirmTitle.Size = UDim2.new(1, 0, 0, 30)
+ConfirmTitle.Position = UDim2.new(0, 0, 0, 16)
+ConfirmTitle.BackgroundTransparency = 1
+ConfirmTitle.Text = "Yakin mau keluar?"
+ConfirmTitle.TextColor3 = C.text
+ConfirmTitle.Font = Enum.Font.GothamBold
+ConfirmTitle.TextSize = 16
+ConfirmTitle.ZIndex = 102
+
+local ConfirmSub = Instance.new("TextLabel", ConfirmBox)
+ConfirmSub.Size = UDim2.new(1, 0, 0, 18)
+ConfirmSub.Position = UDim2.new(0, 0, 0, 44)
+ConfirmSub.BackgroundTransparency = 1
+ConfirmSub.Text = "Script akan dihapus sepenuhnya."
+ConfirmSub.TextColor3 = C.textDim
+ConfirmSub.Font = Enum.Font.GothamMedium
+ConfirmSub.TextSize = 11
+ConfirmSub.ZIndex = 102
+
+local ConfirmYes = Instance.new("TextButton", ConfirmBox)
+ConfirmYes.Size = UDim2.new(0, 110, 0, 34)
+ConfirmYes.Position = UDim2.new(0, 20, 1, -48)
+ConfirmYes.BackgroundColor3 = C.red
+ConfirmYes.BorderSizePixel = 0
+ConfirmYes.Text = "Ya, Keluar"
+ConfirmYes.TextColor3 = Color3.new(1, 1, 1)
+ConfirmYes.Font = Enum.Font.GothamBold
+ConfirmYes.TextSize = 13
+ConfirmYes.ZIndex = 102
+addCorner(ConfirmYes, 8)
+ConfirmYes.MouseEnter:Connect(function() tween(ConfirmYes, {BackgroundTransparency = 0.2}, 0.1) end)
+ConfirmYes.MouseLeave:Connect(function() tween(ConfirmYes, {BackgroundTransparency = 0}, 0.1) end)
+
+local ConfirmNo = Instance.new("TextButton", ConfirmBox)
+ConfirmNo.Size = UDim2.new(0, 110, 0, 34)
+ConfirmNo.Position = UDim2.new(1, -130, 1, -48)
+ConfirmNo.BackgroundColor3 = C.card
+ConfirmNo.BorderSizePixel = 0
+ConfirmNo.Text = "Batal"
+ConfirmNo.TextColor3 = C.text
+ConfirmNo.Font = Enum.Font.GothamBold
+ConfirmNo.TextSize = 13
+ConfirmNo.ZIndex = 102
+addCorner(ConfirmNo, 8)
+addStroke(ConfirmNo, C.border, 1)
+ConfirmNo.MouseEnter:Connect(function() tween(ConfirmNo, {BackgroundColor3 = C.accent}, 0.1) end)
+ConfirmNo.MouseLeave:Connect(function() tween(ConfirmNo, {BackgroundColor3 = C.card}, 0.1) end)
+
 CloseBtn.MouseButton1Click:Connect(function()
+    ConfirmOverlay.Visible = true
+end)
+
+ConfirmYes.MouseButton1Click:Connect(function()
+    ConfirmOverlay.Visible = false
     tween(Main, {Size = UDim2.new(0, 520, 0, 0)}, 0.3)
     task.wait(0.3)
     ScreenGui:Destroy()
     for _, c in Connections do if c.Disconnect then c:Disconnect() end end
+end)
+
+ConfirmNo.MouseButton1Click:Connect(function()
+    ConfirmOverlay.Visible = false
 end)
 
 MinBtn.MouseButton1Click:Connect(function()
@@ -282,12 +362,8 @@ MinBtn.MouseButton1Click:Connect(function()
     tween(Main, {Size = UDim2.new(0, 40, 0, 40), BackgroundTransparency = 0.5}, 0.3)
     task.wait(0.3)
     Main.Visible = false
-    -- Tampilkan MiniBtn hanya jika PC Mode tidak aktif
+    -- MiniBtn tetap di posisinya, tidak dipindah
     if not pcModeEnabled then
-        MiniBtn.Position = UDim2.new(
-            Main.Position.X.Scale, Main.Position.X.Offset,
-            Main.Position.Y.Scale, Main.Position.Y.Offset
-        )
         MiniBtn.Visible = true
     else
         notify("Minimized", "Tekan " .. tostring(currentToggleKey.Name) .. " / Insert untuk buka kembali")
@@ -711,7 +787,7 @@ addButton(pPage, "[*] Reset Character", function()
 end)
 
 addButton(pPage, "[*] Rejoin Server", function()
-    game:GetService("TeleportService"):Teleport(game.PlaceId, Player)
+    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, Player)
 end)
 
 addButton(pPage, "[*] Server Hop", function()
@@ -813,35 +889,72 @@ tpDropPad.PaddingRight = UDim.new(0, 4)
 local TP_DROP_MAX_H = 200  -- max tinggi dropdown sebelum scroll aktif
 
 local tpDropOpen = false
+local tpSearchQuery = ""  -- search filter
 
 local function closeTpDropdown()
     tpDropOpen = false
+    tpSearchQuery = ""
     tween(tpDropdown, {Size = UDim2.new(1, 0, 0, 0)}, 0.18)
     tween(tpSelectChev, {Rotation = 0}, 0.18)
     task.delay(0.2, function() if not tpDropOpen then tpDropdown.Visible = false end end)
 end
 
-local function buildTpDropdown()
+local function buildTpDropdown(filter)
     for _, c in tpDropdown:GetChildren() do
-        if c:IsA("TextButton") or c:IsA("Frame") then c:Destroy() end
+        if c:IsA("TextButton") or c:IsA("Frame") or c:IsA("TextBox") then c:Destroy() end
     end
+
+    -- Search box
+    local searchBox = Instance.new("TextBox", tpDropdown)
+    searchBox.Name = "TpSearchBox"
+    searchBox.Size = UDim2.new(1, 0, 0, 32)
+    searchBox.BackgroundColor3 = C.card
+    searchBox.BorderSizePixel = 0
+    searchBox.PlaceholderText = "🔍 Search player..."
+    searchBox.PlaceholderColor3 = C.textDim
+    searchBox.Text = filter or ""
+    searchBox.TextColor3 = C.text
+    searchBox.Font = Enum.Font.GothamMedium
+    searchBox.TextSize = 12
+    searchBox.ClearTextOnFocus = false
+    addCorner(searchBox, 6)
+
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        tpSearchQuery = searchBox.Text
+        buildTpDropdown(searchBox.Text)
+        tpDropdown.Visible = true
+        -- Resize
+        local totalItems = 1 -- search box
+        for _, c in tpDropdown:GetChildren() do
+            if (c:IsA("TextButton") or c:IsA("TextLabel")) then totalItems = totalItems + 1 end
+        end
+        local totalH = totalItems * 52 + 48
+        local dropH = math.min(totalH, TP_DROP_MAX_H)
+        tpDropdown.Size = UDim2.new(1, 0, 0, dropH)
+    end)
+
     local others = {}
+    local query = (filter or ""):lower()
     for _, p in Players:GetPlayers() do
-        if p ~= Player then table.insert(others, p) end
+        if p ~= Player then
+            if query == "" or p.Name:lower():find(query, 1, true) or p.DisplayName:lower():find(query, 1, true) then
+                table.insert(others, p)
+            end
+        end
     end
 
     if #others == 0 then
         local noLbl = Instance.new("TextLabel", tpDropdown)
         noLbl.Size = UDim2.new(1, 0, 0, 30)
         noLbl.BackgroundTransparency = 1
-        noLbl.Text = "No other players"
+        noLbl.Text = query ~= "" and "Player tidak ditemukan" or "No other players"
         noLbl.TextColor3 = C.textDim
         noLbl.Font = Enum.Font.GothamMedium
         noLbl.TextSize = 11
     else
         for _, p in ipairs(others) do
             local row = Instance.new("TextButton", tpDropdown)
-            row.Size = UDim2.new(1, 0, 0, 48)   -- lebih tinggi
+            row.Size = UDim2.new(1, 0, 0, 48)
             row.BackgroundColor3 = C.card
             row.BackgroundTransparency = 0.3
             row.BorderSizePixel = 0
@@ -863,7 +976,7 @@ local function buildTpDropdown()
             avatarLetter.Font = Enum.Font.GothamBold
             avatarLetter.TextSize = 14
 
-            -- Nama display (lebih besar)
+            -- Nama display
             local rowName = Instance.new("TextLabel", row)
             rowName.Size = UDim2.new(1, -50, 0, 22)
             rowName.Position = UDim2.new(0, 46, 0, 6)
@@ -871,7 +984,7 @@ local function buildTpDropdown()
             rowName.Text = p.DisplayName
             rowName.TextColor3 = C.text
             rowName.Font = Enum.Font.GothamBold
-            rowName.TextSize = 15     -- naik dari 12 → 15
+            rowName.TextSize = 15
             rowName.TextXAlignment = Enum.TextXAlignment.Left
             rowName.TextTruncate = Enum.TextTruncate.AtEnd
 
@@ -883,7 +996,7 @@ local function buildTpDropdown()
             rowUser.Text = "@" .. p.Name
             rowUser.TextColor3 = C.textDim
             rowUser.Font = Enum.Font.GothamMedium
-            rowUser.TextSize = 12     -- naik dari 9 → 12
+            rowUser.TextSize = 12
             rowUser.TextXAlignment = Enum.TextXAlignment.Left
 
             row.MouseEnter:Connect(function() tween(row, {BackgroundTransparency = 0}, 0.1) end)
@@ -899,8 +1012,8 @@ local function buildTpDropdown()
         end
     end
 
-    -- Hitung tinggi dropdown (tiap row 48px), capped di TP_DROP_MAX_H
-    local totalH = (#others == 0 and 1 or #others) * 52 + 12
+    -- Hitung tinggi dropdown: search box (36) + player rows + padding
+    local totalH = 36 + (#others == 0 and 1 or #others) * 52 + 12
     local dropH = math.min(totalH, TP_DROP_MAX_H)
     return dropH
 end
@@ -1327,7 +1440,7 @@ fcStopBtn.Position = UDim2.new(0, 12, 1, -34)
 fcStopBtn.BackgroundColor3 = C.red
 fcStopBtn.BackgroundTransparency = 0.2
 fcStopBtn.BorderSizePixel = 0
-fcStopBtn.Text = "✕   Stop Freecam"
+fcStopBtn.Text = "■   Stop Freecam"
 fcStopBtn.TextColor3 = Color3.new(1, 1, 1)
 fcStopBtn.Font = Enum.Font.GothamBold
 fcStopBtn.TextSize = 13
@@ -1589,7 +1702,7 @@ end
 
 -- Urutan: ◀  ✕  ▶  (stop di tengah, lebih gampang dijangkau)
 local SpectPrevBtn = makeNavBtn(navFrame, "◀", 0,  C.card)
-local SpectStopBtn = makeNavBtn(navFrame, "✕", 43, C.red)
+local SpectStopBtn = makeNavBtn(navFrame, "■", 43, C.red)
 local SpectNextBtn = makeNavBtn(navFrame, "▶", 86, C.card)
 
 -- ── Logika list spectate dan navigasi ──
@@ -2347,13 +2460,10 @@ local function isStaff(player)
 end
 
 local function doRejoin()
-    notify("⚠️ Anti Staff", "Staff terdeteksi! Rejoin...")
+    notify("⚠️ Anti Staff", "Staff terdeteksi! Pindah server...")
     task.wait(1.5)
     local TS = game:GetService("TeleportService")
-    local ok = pcall(function()
-        TS:TeleportToPlaceInstance(game.PlaceId, game.JobId, Players.LocalPlayer)
-    end)
-    if not ok then pcall(function() TS:Teleport(game.PlaceId, Players.LocalPlayer) end) end
+    TS:Teleport(game.PlaceId, Players.LocalPlayer)
 end
 
 addToggle(miscPage, "Anti Staff (Auto Rejoin)", false, function(on)
@@ -2526,13 +2636,13 @@ pcModeSub.TextXAlignment = Enum.TextXAlignment.Left
 local pcTogBg = Instance.new("Frame", pcModeCard)
 pcTogBg.Size = UDim2.new(0, 40, 0, 20)
 pcTogBg.Position = UDim2.new(1, -52, 0.5, -10)
-pcTogBg.BackgroundColor3 = C.toggleOff
+pcTogBg.BackgroundColor3 = C.green
 pcTogBg.BorderSizePixel = 0
 addCorner(pcTogBg, 10)
 
 local pcTogCircle = Instance.new("Frame", pcTogBg)
 pcTogCircle.Size = UDim2.new(0, 16, 0, 16)
-pcTogCircle.Position = UDim2.new(0, 2, 0, 2)
+pcTogCircle.Position = UDim2.new(1, -18, 0, 2)
 pcTogCircle.BackgroundColor3 = C.text
 pcTogCircle.BorderSizePixel = 0
 addCorner(pcTogCircle, 8)
@@ -2557,7 +2667,7 @@ pcTogBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-local keyBindBtn = addButton(miscPage, "Toggle Key: RightControl", function() end)
+local keyBindBtn = addButton(miscPage, "Toggle Key: LeftControl", function() end)
 keyBindBtn.TextColor3 = C.textDim
 
 local bindBtn = addButton(miscPage, "[*] Ganti Toggle Key (tekan key apa aja)", function()
@@ -2577,10 +2687,10 @@ local bindBtn = addButton(miscPage, "[*] Ganti Toggle Key (tekan key apa aja)", 
 end)
 
 addButton(miscPage, "[R] Reset ke Default (RightControl)", function()
-    currentToggleKey = Enum.KeyCode.RightControl
+    currentToggleKey = Enum.KeyCode.LeftControl
     isBindingKey = false
-    keyBindBtn.Text = "Toggle Key: RightControl"
-    notify("Keybind", "Reset ke RightControl")
+    keyBindBtn.Text = "Toggle Key: LeftControl"
+    notify("Keybind", "Reset ke LeftControl")
 end)
 
 addLabel(miscPage, "-- INFO")
@@ -2611,7 +2721,6 @@ UIS.InputBegan:Connect(function(input, gpe)
             toggleKeyDown = true
             if minimized then
                 minimized = false
-                MiniBtn.Visible = false
                 Main.Size = UDim2.new(0, 520, 0, 380)
                 Main.BackgroundTransparency = 0
                 Main.Visible = true
@@ -2633,4 +2742,4 @@ end)
 -- ═══════════════════════════════════════
 Main.BackgroundTransparency = 0
 Main.Size = UDim2.new(0, 520, 0, 380)
-notify("VelxHub v1.5", "Universal Script Loaded")
+notify("VelxHub v1.5", "Tombol leftCtrl untuk toggle")
