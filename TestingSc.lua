@@ -1,7 +1,13 @@
 --[[
-    VelxHub Premium Universal Script UI v1.0
+    VelxHub Premium Universal Script UI v1.1 (Fixed)
     Features: Teleport, NoClip, Fly, Speed, ESP, God Mode, etc.
     Modern dark theme with smooth animations
+    
+    FIXES v1.1:
+    - Fixed MiniBtn (P) click detection - no more accidental open
+    - Fixed Freecam - character now stays frozen
+    - Spectate redesigned - player list + overlay UI
+    - Dance tab - Loop & Stop moved near preset dances
 ]]
 
 -- Services
@@ -129,7 +135,7 @@ TitleBar.BackgroundColor3 = C.sidebar
 TitleBar.BorderSizePixel = 0
 addCorner(TitleBar, 12)
 
--- Draggable (hanya dari TitleBar, dipasang setelah TitleBar dibuat)
+-- Draggable
 do
     local dragging, dragStart, startPos
     TitleBar.InputBegan:Connect(function(input)
@@ -163,7 +169,7 @@ local TitleText = Instance.new("TextLabel", TitleBar)
 TitleText.Size = UDim2.new(1, -80, 1, 0)
 TitleText.Position = UDim2.new(0, 14, 0, 0)
 TitleText.BackgroundTransparency = 1
-TitleText.Text = ">> VelxHub Premium Universal Script v1.0 "
+TitleText.Text = ">> VelxHub Premium Universal Script v1.1 "
 TitleText.TextColor3 = C.text
 TitleText.Font = Enum.Font.GothamBold
 TitleText.TextSize = 14
@@ -191,7 +197,6 @@ local CloseBtn = titleBtn("X", UDim2.new(1, -38, 0, 4), C.red)
 local MinBtn = titleBtn("—", UDim2.new(1, -70, 0, 4), C.orange)
 
 local minimized = false
-local savedPos = nil
 
 -- Mini button (small square when minimized)
 local MiniBtn = Instance.new("TextButton", ScreenGui)
@@ -209,38 +214,57 @@ MiniBtn.ZIndex = 99
 addCorner(MiniBtn, 10)
 addStroke(MiniBtn, C.border, 1)
 
--- Make mini button draggable with click vs drag detection
+-- ═══════════════════════════════════════
+-- FIX: MiniBtn click vs drag detection
+-- Pakai flag isDragging yg baru set true kalau gerak > threshold
+-- InputEnded global tapi cek flag mbDragging biar ga ketuker
+-- ═══════════════════════════════════════
 do
-    local mdrag = false
-    local mdStart, msPos
-    local totalDragDist = 0
+    local mbDown = false        -- apakah mouse ditekan di atas MiniBtn
+    local mbDragging = false    -- apakah sedang di-drag (bukan klik)
+    local mbStart = nil
+    local mbStartPos = nil
+    local DRAG_THRESHOLD = 6    -- pixel minimum buat dianggap drag
 
     MiniBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            mdrag = true
-            totalDragDist = 0
-            mdStart = input.Position
-            msPos = MiniBtn.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    -- Only restore if it was a click (not a drag)
-                    if totalDragDist < 5 then
-                        minimized = false
-                        MiniBtn.Visible = false
-                        Main.Size = UDim2.new(0, 520, 0, 380)
-                        Main.BackgroundTransparency = 0
-                        Main.Visible = true
-                    end
-                    mdrag = false
-                end
-            end)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            mbDown = true
+            mbDragging = false
+            mbStart = input.Position
+            mbStartPos = MiniBtn.Position
         end
     end)
+
     UIS.InputChanged:Connect(function(input)
-        if mdrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - mdStart
-            totalDragDist = totalDragDist + delta.Magnitude
-            MiniBtn.Position = UDim2.new(msPos.X.Scale, msPos.X.Offset + delta.X, msPos.Y.Scale, msPos.Y.Offset + delta.Y)
+        if mbDown and (input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - mbStart
+            if delta.Magnitude > DRAG_THRESHOLD then
+                mbDragging = true
+            end
+            if mbDragging then
+                MiniBtn.Position = UDim2.new(
+                    mbStartPos.X.Scale, mbStartPos.X.Offset + delta.X,
+                    mbStartPos.Y.Scale, mbStartPos.Y.Offset + delta.Y
+                )
+            end
+        end
+    end)
+
+    UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            if mbDown and not mbDragging then
+                -- Ini klik beneran, bukan drag → restore UI
+                minimized = false
+                MiniBtn.Visible = false
+                Main.Size = UDim2.new(0, 520, 0, 380)
+                Main.BackgroundTransparency = 0
+                Main.Visible = true
+            end
+            mbDown = false
+            mbDragging = false
         end
     end)
 end
@@ -279,7 +303,6 @@ Sidebar.BackgroundColor3 = C.sidebar
 Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 2
 
--- Separator line on Main (NOT inside Sidebar so UIListLayout won't eat it)
 local SBLine = Instance.new("Frame", Main)
 SBLine.Name = "SidebarLine"
 SBLine.Size = UDim2.new(0, 1, 1, -36)
@@ -377,7 +400,7 @@ local function createTab(icon, name, order)
 end
 
 -- ═══════════════════════════════════════
--- UI COMPONENTS (Toggle, Button, Slider, Input)
+-- UI COMPONENTS
 -- ═══════════════════════════════════════
 local function addToggle(parent, label, default, callback)
     local holder = Instance.new("Frame", parent)
@@ -444,7 +467,7 @@ local function addButton(parent, label, callback)
     return btn
 end
 
--- Global slider state (satu listener aja buat semua slider)
+-- Global slider state
 local activeSliderUpdate = nil
 
 UIS.InputChanged:Connect(function(input)
@@ -605,7 +628,7 @@ Pages["Player"].Visible = true
 ActiveTab = "Player"
 
 -- ═══════════════════════════════════════
--- HELPER FUNCTIONS (Game logic)
+-- HELPER FUNCTIONS
 -- ═══════════════════════════════════════
 local function getChar()
     return Player.Character or Player.CharacterAdded:Wait()
@@ -752,7 +775,6 @@ addButton(tPage, "[H] TP to Spawn", function()
     end
 end)
 
--- Player list buttons
 addLabel(tPage, "-- PLAYER LIST")
 local playerListFrame = Instance.new("Frame", tPage)
 playerListFrame.Size = UDim2.new(1, 0, 0, 0)
@@ -790,7 +812,6 @@ local mPage = Pages["Movement"]
 
 addLabel(mPage, "-- MOVEMENT HACKS")
 
--- NoClip
 addToggle(mPage, "NoClip", false, function(on)
     States.NoClip = on
     if on then
@@ -809,7 +830,6 @@ addToggle(mPage, "NoClip", false, function(on)
     end
 end)
 
--- Fly
 addToggle(mPage, "Fly", false, function(on)
     States.Fly = on
     local hrp = getHRP()
@@ -855,7 +875,6 @@ end)
 
 addSlider(mPage, "Fly Speed", 10, 500, 50, function(v) FlySpeed = v end)
 
--- Infinite Jump handler
 UIS.JumpRequest:Connect(function()
     if States.InfJump then
         local h = getHum()
@@ -947,45 +966,162 @@ addButton(vPage, "Reset FOV", function()
     Workspace.CurrentCamera.FieldOfView = 70
 end)
 
-addLabel(vPage, "SPECTATE & FREECAM")
+-- ═══════════════════════════════════════
+-- SPECTATE - redesign: player list + overlay UI
+-- ═══════════════════════════════════════
+addLabel(vPage, "-- SPECTATE PLAYER")
 
--- Spectate Player
-addInput(vPage, "Player name to spectate...", function(text)
-    if text == "" then
-        States.Spectating = false
-        spectateTarget = nil
-        Workspace.CurrentCamera.CameraSubject = getHum()
-        notify("Spectate", "Stopped spectating")
-        return
-    end
-    for _, p in Players:GetPlayers() do
-        if p.Name:lower():find(text:lower()) or p.DisplayName:lower():find(text:lower()) then
-            if p.Character and p.Character:FindFirstChildOfClass("Humanoid") then
-                States.Spectating = true
-                spectateTarget = p
-                Workspace.CurrentCamera.CameraSubject = p.Character:FindFirstChildOfClass("Humanoid")
-                notify("Spectate", "Watching: " .. p.DisplayName)
-            end
-            return
+-- Overlay UI saat spectating (muncul di pojok bawah kanan)
+local SpectateOverlay = Instance.new("Frame", ScreenGui)
+SpectateOverlay.Name = "SpectateOverlay"
+SpectateOverlay.Size = UDim2.new(0, 220, 0, 56)
+SpectateOverlay.Position = UDim2.new(1, -234, 1, -70)
+SpectateOverlay.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+SpectateOverlay.BackgroundTransparency = 0.15
+SpectateOverlay.BorderSizePixel = 0
+SpectateOverlay.Visible = false
+SpectateOverlay.ZIndex = 50
+addCorner(SpectateOverlay, 10)
+addStroke(SpectateOverlay, C.accent, 1.5)
+
+-- Dot animasi "live"
+local SpectDot = Instance.new("Frame", SpectateOverlay)
+SpectDot.Size = UDim2.new(0, 8, 0, 8)
+SpectDot.Position = UDim2.new(0, 12, 0.5, -4)
+SpectDot.BackgroundColor3 = C.red
+SpectDot.BorderSizePixel = 0
+SpectDot.ZIndex = 51
+addCorner(SpectDot, 4)
+
+-- Blink animasi buat dot
+task.spawn(function()
+    while true do
+        task.wait(0.7)
+        if SpectateOverlay.Visible then
+            tween(SpectDot, {BackgroundTransparency = 0.8}, 0.35)
+            task.wait(0.35)
+            tween(SpectDot, {BackgroundTransparency = 0}, 0.35)
         end
     end
-    notify("Error", "Player not found")
 end)
 
-addButton(vPage, "Stop Spectate", function()
+local SpectLabel = Instance.new("TextLabel", SpectateOverlay)
+SpectLabel.Size = UDim2.new(1, -28, 0, 18)
+SpectLabel.Position = UDim2.new(0, 26, 0, 8)
+SpectLabel.BackgroundTransparency = 1
+SpectLabel.Text = "SPECTATING"
+SpectLabel.TextColor3 = C.textDim
+SpectLabel.Font = Enum.Font.GothamBold
+SpectLabel.TextSize = 10
+SpectLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpectLabel.ZIndex = 51
+
+local SpectNameLabel = Instance.new("TextLabel", SpectateOverlay)
+SpectNameLabel.Size = UDim2.new(1, -28, 0, 20)
+SpectNameLabel.Position = UDim2.new(0, 26, 0, 24)
+SpectNameLabel.BackgroundTransparency = 1
+SpectNameLabel.Text = "—"
+SpectNameLabel.TextColor3 = C.text
+SpectNameLabel.Font = Enum.Font.GothamBold
+SpectNameLabel.TextSize = 14
+SpectNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpectNameLabel.ZIndex = 51
+
+local SpectStopBtn = Instance.new("TextButton", SpectateOverlay)
+SpectStopBtn.Size = UDim2.new(0, 40, 0, 40)
+SpectStopBtn.Position = UDim2.new(1, -50, 0.5, -20)
+SpectStopBtn.BackgroundColor3 = C.red
+SpectStopBtn.BackgroundTransparency = 0.6
+SpectStopBtn.BorderSizePixel = 0
+SpectStopBtn.Text = "✕"
+SpectStopBtn.TextColor3 = C.text
+SpectStopBtn.Font = Enum.Font.GothamBold
+SpectStopBtn.TextSize = 14
+SpectStopBtn.ZIndex = 52
+addCorner(SpectStopBtn, 8)
+
+local function stopSpectate()
     States.Spectating = false
     spectateTarget = nil
     Workspace.CurrentCamera.CameraSubject = getHum()
+    SpectateOverlay.Visible = false
     notify("Spectate", "Stopped")
-end)
+end
 
--- Freecam
+SpectStopBtn.MouseButton1Click:Connect(stopSpectate)
+SpectStopBtn.MouseEnter:Connect(function() tween(SpectStopBtn, {BackgroundTransparency = 0.2}, 0.15) end)
+SpectStopBtn.MouseLeave:Connect(function() tween(SpectStopBtn, {BackgroundTransparency = 0.6}, 0.15) end)
+
+-- Player list untuk spectate (di dalam Visual tab)
+local spectListContainer = Instance.new("Frame", vPage)
+spectListContainer.Size = UDim2.new(1, 0, 0, 0)
+spectListContainer.BackgroundTransparency = 1
+spectListContainer.AutomaticSize = Enum.AutomaticSize.Y
+
+local spectListLayout = Instance.new("UIListLayout", spectListContainer)
+spectListLayout.Padding = UDim.new(0, 4)
+
+local function refreshSpectList()
+    for _, c in spectListContainer:GetChildren() do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    for _, p in Players:GetPlayers() do
+        if p ~= Player then
+            local btn = addButton(spectListContainer,
+                "👁  " .. p.DisplayName .. " (@" .. p.Name .. ")",
+                function()
+                    if p.Character and p.Character:FindFirstChildOfClass("Humanoid") then
+                        States.Spectating = true
+                        spectateTarget = p
+                        Workspace.CurrentCamera.CameraSubject = p.Character:FindFirstChildOfClass("Humanoid")
+                        SpectNameLabel.Text = p.DisplayName .. " (@" .. p.Name .. ")"
+                        SpectateOverlay.Visible = true
+                        notify("Spectate", "👁 Watching: " .. p.DisplayName)
+                    else
+                        notify("Spectate", p.DisplayName .. " has no character")
+                    end
+                end
+            )
+        end
+    end
+    if #spectListContainer:GetChildren() <= 1 then -- hanya layout
+        local noOne = Instance.new("TextLabel", spectListContainer)
+        noOne.Size = UDim2.new(1, 0, 0, 30)
+        noOne.BackgroundTransparency = 1
+        noOne.Text = "No other players in server"
+        noOne.TextColor3 = C.textDim
+        noOne.Font = Enum.Font.GothamMedium
+        noOne.TextSize = 12
+    end
+end
+refreshSpectList()
+
+addButton(vPage, "[*] Refresh Spectate List", refreshSpectList)
+
+addButton(vPage, "[X] Stop Spectate", stopSpectate)
+
+-- ═══════════════════════════════════════
+-- FIX: FREECAM - freeze character saat aktif
+-- ═══════════════════════════════════════
+addLabel(vPage, "-- FREECAM")
+
 addToggle(vPage, "Freecam", false, function(on)
     States.Freecam = on
     local cam = Workspace.CurrentCamera
+
     if on then
         freecamPos = cam.CFrame
         cam.CameraType = Enum.CameraType.Scriptable
+
+        -- FREEZE karakter: anchor HRP supaya gak kemana-mana
+        local hrpFC = getHRP()
+        local humFC = getHum()
+        if hrpFC then hrpFC.Anchored = true end
+        if humFC then
+            humFC.WalkSpeed = 0
+            humFC.JumpPower = 0
+        end
+
         local freecamSpeed = 1
 
         Connections.freecam = RunService.RenderStepped:Connect(function(dt)
@@ -997,21 +1133,30 @@ addToggle(vPage, "Freecam", false, function(on)
             if UIS:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
             if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
-            if UIS:IsKeyDown(Enum.KeyCode.E) then freecamSpeed = math.min(freecamSpeed + 0.1, 10) end
-            if UIS:IsKeyDown(Enum.KeyCode.Q) then freecamSpeed = math.max(freecamSpeed - 0.1, 0.1) end
+            if UIS:IsKeyDown(Enum.KeyCode.E) then freecamSpeed = math.min(freecamSpeed + 0.08, 10) end
+            if UIS:IsKeyDown(Enum.KeyCode.Q) then freecamSpeed = math.max(freecamSpeed - 0.08, 0.1) end
             cam.CFrame = cam.CFrame + move * freecamSpeed
         end)
-        notify("Freecam", "ON - WASD move, Space/Shift up/down, Q/E speed")
+        notify("Freecam", "ON - WASD/Space/Shift | Q/E speed | karakter diam")
     else
         if Connections.freecam then Connections.freecam:Disconnect() end
         cam.CameraType = Enum.CameraType.Custom
         cam.CameraSubject = getHum()
-        notify("Freecam", "Disabled")
+
+        -- UNFREEZE karakter
+        local hrpFC = getHRP()
+        local humFC = getHum()
+        if hrpFC then hrpFC.Anchored = false end
+        if humFC then
+            humFC.WalkSpeed = WalkSpeedVal
+            humFC.JumpPower = JumpPowerVal
+        end
+        notify("Freecam", "Disabled - karakter unfrozen")
     end
 end)
 
 -- Locate Player
-addLabel(vPage, "LOCATE PLAYER")
+addLabel(vPage, "-- LOCATE PLAYER")
 
 addInput(vPage, "Player name to locate...", function(text)
     if text == "" then return end
@@ -1022,7 +1167,7 @@ addInput(vPage, "Player name to locate...", function(text)
                 local myPos = getHRP() and getHRP().Position or Vector3.new(0,0,0)
                 local dist = math.floor((pos - myPos).Magnitude)
                 notify("Locate: " .. p.DisplayName,
-                    string.format("Pos: %.0f, %.0f, %.0f\nDistance: %d studs", pos.X, pos.Y, pos.Z, dist))
+                    string.format("Pos: %.0f, %.0f, %.0f\nDist: %d studs", pos.X, pos.Y, pos.Z, dist))
                 pcall(function()
                     local beam = Instance.new("Highlight", p.Character)
                     beam.Name = "LocateHL"
@@ -1041,7 +1186,8 @@ addInput(vPage, "Player name to locate...", function(text)
 end)
 
 -- ═══════════════════════════════════════
--- DANCE TAB
+-- DANCE TAB (REORDERED)
+-- Order baru: Preset Dances → Loop/Stop controls → Custom Emote → Custom Anim → Replace Anims → Packs
 -- ═══════════════════════════════════════
 local dPage = Pages["Dance"]
 local currentEmoteTrack = nil
@@ -1095,11 +1241,8 @@ local function stopAllDanceAnims()
     restoreAnimateScript()
 end
 
--- Resolve emote/bundle ID ke animation ID yang sebenarnya
 local function resolveEmoteId(emoteId)
     local animationId = nil
-
-    -- Method 1: InsertService:LoadAsset (works if emote is owned/free)
     pcall(function()
         local model = game:GetService("InsertService"):LoadAsset(emoteId)
         if model then
@@ -1112,8 +1255,6 @@ local function resolveEmoteId(emoteId)
             model:Destroy()
         end
     end)
-
-    -- Method 2: game:GetObjects (executor function, works for most assets)
     if not animationId then
         pcall(function()
             if game.GetObjects then
@@ -1134,12 +1275,9 @@ local function resolveEmoteId(emoteId)
             end
         end)
     end
-
-    -- Fallback: pakai ID langsung (kalau memang sudah animation ID)
     if not animationId then
         animationId = "rbxassetid://" .. tostring(emoteId)
     end
-
     return animationId
 end
 
@@ -1150,12 +1288,9 @@ local function playEmoteById(emoteId)
     killAllCharacterAnims()
     disableAnimateScript()
     local animator = hum:FindFirstChildOfClass("Animator")
-    if not animator then
-        animator = Instance.new("Animator", hum)
-    end
+    if not animator then animator = Instance.new("Animator", hum) end
 
     local animationId = resolveEmoteId(emoteId)
-
     local anim = Instance.new("Animation")
     anim.AnimationId = animationId
     local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
@@ -1165,8 +1300,6 @@ local function playEmoteById(emoteId)
         track:Play(0)
         currentEmoteTrack = track
         notify("Dance", "Playing emote: " .. tostring(emoteId))
-
-        -- Auto-restore when animation finishes (non-looped)
         track.Stopped:Connect(function()
             if currentEmoteTrack == track then
                 pcall(function() track:Destroy() end)
@@ -1174,21 +1307,21 @@ local function playEmoteById(emoteId)
                 restoreAnimateScript()
             end
         end)
-
-        -- Safety check: kalau animasi gak jalan (length 0), restore Animate script
         task.delay(1.5, function()
             if currentEmoteTrack == track and track.Length == 0 then
-                notify("Dance", "⚠️ Emote gak valid atau belum owned. Coba pakai Animation ID langsung.")
+                notify("Dance", "⚠️ Emote gak valid atau belum owned.")
                 pcall(function() track:Stop() track:Destroy() end)
                 currentEmoteTrack = nil
                 restoreAnimateScript()
             end
         end)
     else
-        notify("Dance", "Gagal load emote ID: " .. tostring(emoteId) .. ". Coba pakai Animation ID.")
+        notify("Dance", "Gagal load emote ID: " .. tostring(emoteId))
         restoreAnimateScript()
     end
 end
+
+local animSpeedVal = 1
 
 local function playAnimById(animId, speed)
     stopAllDanceAnims()
@@ -1197,9 +1330,7 @@ local function playAnimById(animId, speed)
     killAllCharacterAnims()
     disableAnimateScript()
     local animator = hum:FindFirstChildOfClass("Animator")
-    if not animator then
-        animator = Instance.new("Animator", hum)
-    end
+    if not animator then animator = Instance.new("Animator", hum) end
     local anim = Instance.new("Animation")
     anim.AnimationId = "rbxassetid://" .. tostring(animId)
     local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
@@ -1210,8 +1341,6 @@ local function playAnimById(animId, speed)
         track:Play(0)
         currentAnimTrack = track
         notify("Animation", "Playing: " .. tostring(animId) .. " (speed: " .. tostring(speed or 1) .. ")")
-
-        -- Auto-restore when animation finishes (non-looped)
         track.Stopped:Connect(function()
             if currentAnimTrack == track then
                 pcall(function() track:Destroy() end)
@@ -1225,7 +1354,7 @@ local function playAnimById(animId, speed)
     end
 end
 
--- ── Preset Dances ──
+-- ── [1] Preset Dances ──
 addLabel(dPage, "-- PRESET DANCES")
 
 local presetDances = {
@@ -1241,7 +1370,55 @@ for _, dance in ipairs(presetDances) do
     end)
 end
 
--- ── Custom Emote by ID ──
+-- ── [2] Loop & Stop controls - DEKAT preset dances ──
+addLabel(dPage, "-- PLAYBACK CONTROLS")
+
+addToggle(dPage, "Loop Animation", false, function(on)
+    loopAnimEnabled = on
+    if not on then
+        stopAllDanceAnims()
+        notify("Dance", "Loop off — animation stopped")
+    else
+        if currentAnimTrack then currentAnimTrack.Looped = true end
+        if currentEmoteTrack then currentEmoteTrack.Looped = true end
+    end
+end)
+
+addButton(dPage, "[X] Stop Dance / Animation", function()
+    stopAllDanceAnims()
+    notify("Dance", "All animations stopped")
+end)
+
+addButton(dPage, "[X] Stop ALL + Reset Anims", function()
+    if currentEmoteTrack then
+        pcall(function() currentEmoteTrack:Stop(0) currentEmoteTrack:Destroy() end)
+        currentEmoteTrack = nil
+    end
+    if currentAnimTrack then
+        pcall(function() currentAnimTrack:Stop(0) currentAnimTrack:Destroy() end)
+        currentAnimTrack = nil
+    end
+    local char = Player.Character
+    if char then
+        local animateScript = char:FindFirstChild("Animate")
+        if animateScript then
+            for animType, originals in pairs(savedOriginalAnims or {}) do
+                local folder = animateScript:FindFirstChild(animType)
+                if folder then
+                    for _, child in ipairs(folder:GetChildren()) do
+                        if child:IsA("Animation") and originals[child.Name] then
+                            child.AnimationId = originals[child.Name]
+                        end
+                    end
+                end
+            end
+        end
+    end
+    restoreAnimateScript()
+    notify("Dance", "All character animations cleared")
+end)
+
+-- ── [3] Custom Emote by ID ──
 addLabel(dPage, "-- CUSTOM EMOTE (by ID)")
 
 addInput(dPage, "Enter Emote ID (e.g. 507771019)", function(text)
@@ -1254,10 +1431,8 @@ addInput(dPage, "Enter Emote ID (e.g. 507771019)", function(text)
     end
 end)
 
--- ── Custom Animation by ID ──
+-- ── [4] Custom Animation by ID ──
 addLabel(dPage, "-- CUSTOM ANIMATION (by ID)")
-
-local animSpeedVal = 1
 
 addInput(dPage, "Enter Animation ID", function(text)
     if text == "" then return end
@@ -1271,15 +1446,11 @@ end)
 
 addSlider(dPage, "Animation Speed", 1, 30, 10, function(v)
     animSpeedVal = v / 10
-    if currentAnimTrack then
-        pcall(function() currentAnimTrack:AdjustSpeed(animSpeedVal) end)
-    end
-    if currentEmoteTrack then
-        pcall(function() currentEmoteTrack:AdjustSpeed(animSpeedVal) end)
-    end
+    if currentAnimTrack then pcall(function() currentAnimTrack:AdjustSpeed(animSpeedVal) end) end
+    if currentEmoteTrack then pcall(function() currentEmoteTrack:AdjustSpeed(animSpeedVal) end) end
 end)
 
--- ── Replace Character Animations (Walk, Run, Jump, etc.) ──
+-- ── [5] Replace Character Animations ──
 addLabel(dPage, "-- REPLACE CHARACTER ANIMS")
 
 local savedOriginalAnims = {}
@@ -1287,13 +1458,10 @@ local savedOriginalAnims = {}
 local function replaceCharAnim(animType, newId)
     local char = Player.Character
     if not char then notify("Anim", "No character") return end
-
     local animateScript = char:FindFirstChild("Animate")
     if not animateScript then notify("Anim", "No Animate script found") return end
-
     local folder = animateScript:FindFirstChild(animType)
     if not folder then notify("Anim", "No folder: " .. animType) return end
-
     if not savedOriginalAnims[animType] then
         savedOriginalAnims[animType] = {}
         for _, child in ipairs(folder:GetChildren()) do
@@ -1302,7 +1470,6 @@ local function replaceCharAnim(animType, newId)
             end
         end
     end
-
     local changed = 0
     for _, child in ipairs(folder:GetChildren()) do
         if child:IsA("Animation") then
@@ -1310,7 +1477,6 @@ local function replaceCharAnim(animType, newId)
             changed = changed + 1
         end
     end
-
     if changed > 0 then
         notify("Anim", animType .. " -> " .. tostring(newId) .. " (" .. changed .. " updated)")
     else
@@ -1340,24 +1506,19 @@ for _, at in ipairs(animTypes) do
     end)
 end
 
--- ── Animation Pack Presets ──
+-- ── [6] Animation Pack Presets ──
 addLabel(dPage, "-- ANIMATION PACKS")
 
--- ══════════════════════════════════════
--- VAMPIRE ANIMATION PACK (Bundle 33)
--- ID beneran dari Pastebin & devforum
--- ══════════════════════════════════════
 local vampireAnims = {
-    {label = "Vampire Idle",      key = "idle",  id1 = 1083445855, id2 = 1083450166}, -- idle punya 2 animation
-    {label = "Vampire Walk",      key = "walk",  id = 1083473930},
-    {label = "Vampire Run",       key = "run",   id = 1083462077},
-    {label = "Vampire Jump",      key = "jump",  id = 1083455352},
-    {label = "Vampire Fall",      key = "fall",  id = 1083443587},
-    {label = "Vampire Climb",     key = "climb", id = 1083439238},
-    {label = "Vampire Swim",      key = "swim",  id = 1083443587}, -- fallback sama fall
+    {label = "Vampire Idle",  key = "idle",  id1 = 1083445855, id2 = 1083450166},
+    {label = "Vampire Walk",  key = "walk",  id = 1083473930},
+    {label = "Vampire Run",   key = "run",   id = 1083462077},
+    {label = "Vampire Jump",  key = "jump",  id = 1083455352},
+    {label = "Vampire Fall",  key = "fall",  id = 1083443587},
+    {label = "Vampire Climb", key = "climb", id = 1083439238},
+    {label = "Vampire Swim",  key = "swim",  id = 1083443587},
 }
 
--- Fungsi khusus untuk idle yang punya 2 animasi
 local function replaceIdleAnim(id1, id2)
     local char = Player.Character
     if not char then notify("Anim", "No character") return end
@@ -1365,8 +1526,6 @@ local function replaceIdleAnim(id1, id2)
     if not animateScript then notify("Anim", "No Animate script") return end
     local idleFolder = animateScript:FindFirstChild("idle")
     if not idleFolder then notify("Anim", "No idle folder") return end
-
-    -- Save originals
     if not savedOriginalAnims["idle"] then
         savedOriginalAnims["idle"] = {}
         for _, child in ipairs(idleFolder:GetChildren()) do
@@ -1375,7 +1534,6 @@ local function replaceIdleAnim(id1, id2)
             end
         end
     end
-
     local anim1 = idleFolder:FindFirstChild("Animation1")
     local anim2 = idleFolder:FindFirstChild("Animation2")
     if anim1 then anim1.AnimationId = "rbxassetid://" .. tostring(id1) end
@@ -1383,16 +1541,11 @@ local function replaceIdleAnim(id1, id2)
     notify("Anim", "Vampire Idle applied!")
 end
 
--- Tombol per animasi
 for _, va in ipairs(vampireAnims) do
     if va.key == "idle" then
-        addButton(dPage, va.label, function()
-            replaceIdleAnim(va.id1, va.id2)
-        end)
+        addButton(dPage, va.label, function() replaceIdleAnim(va.id1, va.id2) end)
     else
-        addButton(dPage, va.label, function()
-            replaceCharAnim(va.key, va.id)
-        end)
+        addButton(dPage, va.label, function() replaceCharAnim(va.key, va.id) end)
     end
 end
 
@@ -1407,7 +1560,6 @@ addButton(dPage, "[!] Apply ALL Vampire Anims", function()
     notify("Anim Pack", "Vampire Animation Pack applied! 🧛")
 end)
 
--- ── Werewolf Pack (bonus) ──
 addLabel(dPage, "-- WEREWOLF PACK (Bonus)")
 
 local werewolfAnims = {
@@ -1421,9 +1573,7 @@ local werewolfAnims = {
 }
 
 for _, wa in ipairs(werewolfAnims) do
-    addButton(dPage, wa.label, function()
-        replaceCharAnim(wa.key, wa.id)
-    end)
+    addButton(dPage, wa.label, function() replaceCharAnim(wa.key, wa.id) end)
 end
 
 addButton(dPage, "[!] Apply ALL Werewolf Anims", function()
@@ -1454,60 +1604,6 @@ addButton(dPage, "[*] Reset All Anims to Default", function()
     notify("Anim", "All animations reset to default!")
 end)
 
--- ── Controls ──
-addLabel(dPage, "-- CONTROLS")
-
-addToggle(dPage, "Loop Animation", false, function(on)
-    loopAnimEnabled = on
-    if not on then
-        stopAllDanceAnims()
-        notify("Dance", "Loop off — animation stopped")
-    else
-        if currentAnimTrack then
-            currentAnimTrack.Looped = true
-        end
-        if currentEmoteTrack then
-            currentEmoteTrack.Looped = true
-        end
-    end
-end)
-
-addButton(dPage, "[X] Stop All Dances/Animations", function()
-    stopAllDanceAnims()
-    notify("Dance", "All animations stopped")
-end)
-
-addButton(dPage, "[X] Stop ALL Character Anims", function()
-    if currentEmoteTrack then
-        pcall(function() currentEmoteTrack:Stop(0) currentEmoteTrack:Destroy() end)
-        currentEmoteTrack = nil
-    end
-    if currentAnimTrack then
-        pcall(function() currentAnimTrack:Stop(0) currentAnimTrack:Destroy() end)
-        currentAnimTrack = nil
-    end
-
-    local char = Player.Character
-    if char then
-        local animateScript = char:FindFirstChild("Animate")
-        if animateScript then
-            for animType, originals in pairs(savedOriginalAnims) do
-                local folder = animateScript:FindFirstChild(animType)
-                if folder then
-                    for _, child in ipairs(folder:GetChildren()) do
-                        if child:IsA("Animation") and originals[child.Name] then
-                            child.AnimationId = originals[child.Name]
-                        end
-                    end
-                end
-            end
-        end
-    end
-    savedOriginalAnims = {}
-    restoreAnimateScript()
-    notify("Dance", "All character animations cleared")
-end)
-
 -- ═══════════════════════════════════════
 -- FARM TAB
 -- ═══════════════════════════════════════
@@ -1515,88 +1611,52 @@ local farmPage = Pages["Farm"]
 
 addLabel(farmPage, "AUTO COLLECT COIN")
 
---[[
-    Sistem coin game ini:
-    - Server spawn Part/MeshPart coin di Workspace (di dalam folder GoldSpawns atau assetnew)
-    - Coin punya attribute IsCollected = false saat aktif
-    - Collect terjadi saat karakter MENYENTUH (Touched) coin
-    - Kita cari semua coin aktif di workspace lalu teleport ke sana
-    
-    Nama coin yang di-spawn server belum diketahui (server protected)
-    Jadi kita scan SEMUA Part/MeshPart kecil di zona GoldSpawns
-    yang punya attribute IsCollected = false
-]]
-
 local autoCollectRunning = false
 local collectDelay = 1
 
--- Zona GoldSpawns (posisi dari map, radius ~30 studs tiap zona)
 local GOLD_ZONES = {
-    Vector3.new(442, 125, -203),
-    Vector3.new(214, 125, 3),
-    Vector3.new(-52, 101, -56),
-    Vector3.new(-253, 137, -286),
-    Vector3.new(-186, 114, -649),
-    Vector3.new(-31, 153, -851),
-    Vector3.new(383, 125, -737),
-    Vector3.new(301, 96, -349),
-    Vector3.new(-47, 59, -474),
-    Vector3.new(-129, 103, -15),
-    Vector3.new(-40, 100, 83),
-    Vector3.new(405, 127, 20),
-    Vector3.new(-202, 76, -371),
-    Vector3.new(-204, 121, -185),
-    Vector3.new(-310, 138, -93),
-    Vector3.new(591, 146, -418),
+    Vector3.new(442, 125, -203), Vector3.new(214, 125, 3),
+    Vector3.new(-52, 101, -56),  Vector3.new(-253, 137, -286),
+    Vector3.new(-186, 114, -649),Vector3.new(-31, 153, -851),
+    Vector3.new(383, 125, -737), Vector3.new(301, 96, -349),
+    Vector3.new(-47, 59, -474),  Vector3.new(-129, 103, -15),
+    Vector3.new(-40, 100, 83),   Vector3.new(405, 127, 20),
+    Vector3.new(-202, 76, -371), Vector3.new(-204, 121, -185),
+    Vector3.new(-310, 138, -93), Vector3.new(591, 146, -418),
     Vector3.new(63, 155, -819),
 }
 
--- Fungsi cari semua coin aktif di workspace
 local function findCoins()
     local coins = {}
-    -- Cari di GoldSpawns folder
     local goldSpawns = workspace:FindFirstChild("GoldSpawns")
     if goldSpawns then
         for _, v in ipairs(goldSpawns:GetDescendants()) do
             if (v:IsA("Part") or v:IsA("MeshPart") or v:IsA("UnionOperation")) then
-                -- Cek attribute IsCollected
                 local isCollected = v:GetAttribute("IsCollected")
-                if isCollected == false then
-                    table.insert(coins, v)
-                end
+                if isCollected == false then table.insert(coins, v) end
             end
         end
     end
-    
-    -- Cari di assetnew folder juga
     local assetnew = workspace:FindFirstChild("assetnew")
     if assetnew then
         for _, v in ipairs(assetnew:GetDescendants()) do
             if (v:IsA("Part") or v:IsA("MeshPart")) then
                 local isCollected = v:GetAttribute("IsCollected")
-                if isCollected == false then
-                    table.insert(coins, v)
-                end
+                if isCollected == false then table.insert(coins, v) end
             end
         end
     end
-    
-    -- Fallback: scan workspace langsung untuk part kecil dgn IsCollected
     if #coins == 0 then
         for _, v in ipairs(workspace:GetDescendants()) do
             if (v:IsA("Part") or v:IsA("MeshPart")) then
                 local isCollected = v:GetAttribute("IsCollected")
-                if isCollected == false then
-                    table.insert(coins, v)
-                end
+                if isCollected == false then table.insert(coins, v) end
             end
         end
     end
-    
     return coins
 end
 
--- Status label
 local collectStatusLabel = Instance.new("TextLabel")
 collectStatusLabel.Size = UDim2.new(1, -16, 0, 22)
 collectStatusLabel.BackgroundTransparency = 1
@@ -1607,68 +1667,43 @@ collectStatusLabel.Text = "Status: OFF | Coin ditemukan: 0"
 collectStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 collectStatusLabel.Parent = farmPage
 
--- Toggle Auto Collect
 addToggle(farmPage, "Auto Collect Coin", false, function(on)
     autoCollectRunning = on
-
     if on then
         task.spawn(function()
             while autoCollectRunning do
                 local char = Players.LocalPlayer.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
-
                 if not (hrp and hum and hum.Health > 0) then
                     collectStatusLabel.Text = "Nunggu karakter... ⏳"
-                    task.wait(1)
-                    continue
+                    task.wait(1) continue
                 end
-
                 local coins = findCoins()
                 collectStatusLabel.Text = "Coin aktif: " .. #coins .. " 🟢 Collecting..."
-
                 if #coins == 0 then
                     collectStatusLabel.Text = "Nunggu coin spawn... ⏳"
-                    task.wait(2)
-                    continue
+                    task.wait(2) continue
                 end
-
-                -- Simpan posisi asal
                 local originalCFrame = hrp.CFrame
-
                 for _, coin in ipairs(coins) do
                     if not autoCollectRunning then break end
                     if not coin or not coin.Parent then continue end
-
                     hrp = char and char:FindFirstChild("HumanoidRootPart")
                     hum = char and char:FindFirstChildOfClass("Humanoid")
                     if not hrp or not hum then break end
-
                     local coinPos = coin.Position
-
-                    -- Sweep dari atas ke bawah melewati coin biar pasti Touched
-                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, 5, 0))
-                    task.wait(0.05)
-                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, 3, 0))
-                    task.wait(0.05)
-                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, 1, 0))
-                    task.wait(0.05)
-                    hrp.CFrame = CFrame.new(coinPos)
-                    task.wait(0.05)
-                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, -1, 0))
-                    task.wait(0.05)
-                    -- Balik ke tengah coin
+                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, 5, 0)) task.wait(0.05)
+                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, 3, 0)) task.wait(0.05)
+                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, 1, 0)) task.wait(0.05)
+                    hrp.CFrame = CFrame.new(coinPos)                        task.wait(0.05)
+                    hrp.CFrame = CFrame.new(coinPos + Vector3.new(0, -1, 0))task.wait(0.05)
                     hrp.CFrame = CFrame.new(coinPos)
                     hum.Jump = true
                     task.wait(collectDelay)
                 end
-
-                -- Kembalikan ke posisi asal
                 hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    hrp.CFrame = originalCFrame
-                end
-
+                if hrp then hrp.CFrame = originalCFrame end
                 task.wait(0.5)
             end
             collectStatusLabel.Text = "Status: OFF | Coin ditemukan: 0"
@@ -1678,9 +1713,7 @@ addToggle(farmPage, "Auto Collect Coin", false, function(on)
     end
 end)
 
-addSlider(farmPage, "Delay Per Coin (detik)", 1, 4, 1, function(val)
-    collectDelay = val
-end)
+addSlider(farmPage, "Delay Per Coin (detik)", 1, 4, 1, function(val) collectDelay = val end)
 
 addLabel(farmPage, "TELEPORT KE GOLD ZONE")
 
@@ -1702,20 +1735,11 @@ local miscPage = Pages["Misc"]
 
 addLabel(miscPage, "ANTI STAFF")
 
---[[
-    Staff detection berdasarkan:
-    1. GroupId admin game = 564796604 (dari BAE config map)
-    2. Bisa tambah username manual
-    
-    Kalau staff terdeteksi → auto rejoin server lain
-]]
-
 local STAFF_GROUP_ID = 564796604
 local antiStaffRunning = false
-local customStaffNames = {} -- username tambahan manual
-local antiStaffConnection = nil -- simpan connection biar bisa disconnect
+local customStaffNames = {}
+local antiStaffConnection = nil
 
--- Status
 local staffStatusLabel = Instance.new("TextLabel")
 staffStatusLabel.Size = UDim2.new(1, -16, 0, 22)
 staffStatusLabel.BackgroundTransparency = 1
@@ -1728,14 +1752,10 @@ staffStatusLabel.Parent = miscPage
 
 local function isStaff(player)
     if player == Players.LocalPlayer then return false end
-    -- Cek username manual
     for _, name in ipairs(customStaffNames) do
         if player.Name:lower() == name:lower() then return true end
     end
-    -- Cek grup
-    local ok, result = pcall(function()
-        return player:IsInGroup(STAFF_GROUP_ID)
-    end)
+    local ok, result = pcall(function() return player:IsInGroup(STAFF_GROUP_ID) end)
     if ok and result then return true end
     return false
 end
@@ -1747,38 +1767,23 @@ local function doRejoin()
     local ok = pcall(function()
         TS:TeleportToPlaceInstance(game.PlaceId, game.JobId, Players.LocalPlayer)
     end)
-    if not ok then
-        pcall(function()
-            TS:Teleport(game.PlaceId, Players.LocalPlayer)
-        end)
-    end
+    if not ok then pcall(function() TS:Teleport(game.PlaceId, Players.LocalPlayer) end) end
 end
 
 addToggle(miscPage, "Anti Staff (Auto Rejoin)", false, function(on)
     antiStaffRunning = on
-
-    -- Disconnect connection lama dulu supaya gak numpuk
-    if antiStaffConnection then
-        antiStaffConnection:Disconnect()
-        antiStaffConnection = nil
-    end
-
+    if antiStaffConnection then antiStaffConnection:Disconnect() antiStaffConnection = nil end
     staffStatusLabel.Text = on and "Anti Staff: ON 🟢 Monitoring..." or "Anti Staff: OFF"
-
     if on then
-        -- Cek player yang udah ada dulu
         for _, p in ipairs(Players:GetPlayers()) do
             if isStaff(p) then
                 staffStatusLabel.Text = "⚠️ STAFF DETECTED: " .. p.Name
-                doRejoin()
-                return
+                doRejoin() return
             end
         end
-
-        -- Monitor player baru yang join (1 connection aja)
         antiStaffConnection = Players.PlayerAdded:Connect(function(p)
             if not antiStaffRunning then return end
-            task.wait(2) -- tunggu data player load
+            task.wait(2)
             if isStaff(p) then
                 staffStatusLabel.Text = "⚠️ STAFF JOIN: " .. p.Name
                 doRejoin()
@@ -1787,7 +1792,6 @@ addToggle(miscPage, "Anti Staff (Auto Rejoin)", false, function(on)
     end
 end)
 
--- Input tambah username staff manual
 addInput(miscPage, "Tambah username staff...", function(text)
     if text == "" then return end
     table.insert(customStaffNames, text)
@@ -1797,7 +1801,6 @@ end)
 
 addLabel(miscPage, "ANTI FEATURES")
 
--- Anti AFK
 addToggle(miscPage, "Anti AFK", true, function(on)
     States.AntiAFK = on
     if on then
@@ -1807,14 +1810,13 @@ addToggle(miscPage, "Anti AFK", true, function(on)
             task.wait(1)
             vu:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
         end)
-        notify("Anti AFK", "Enabled - Won't get kicked for idle")
+        notify("Anti AFK", "Enabled")
     else
         if Connections.antiafk then Connections.antiafk:Disconnect() end
         notify("Anti AFK", "Disabled")
     end
 end)
 
--- Auto-enable Anti AFK on load
 do
     local vu = game:GetService("VirtualUser")
     Connections.antiafk = Players.LocalPlayer.Idled:Connect(function()
@@ -1824,28 +1826,22 @@ do
     end)
 end
 
--- Anti Lag
 addButton(miscPage, "Anti Lag (Clean Up)", function()
     local removed = 0
     for _, v in Workspace:GetDescendants() do
         if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
-            v.Enabled = false
-            removed = removed + 1
+            v.Enabled = false removed = removed + 1
         elseif v:IsA("Explosion") then
-            v:Destroy()
-            removed = removed + 1
+            v:Destroy() removed = removed + 1
         elseif v:IsA("Decal") or v:IsA("Texture") then
-            v.Transparency = 1
-            removed = removed + 1
+            v.Transparency = 1 removed = removed + 1
         end
     end
     pcall(function()
         local terrain = Workspace:FindFirstChildOfClass("Terrain")
         if terrain then
-            terrain.WaterWaveSize = 0
-            terrain.WaterWaveSpeed = 0
-            terrain.WaterReflectance = 0
-            terrain.WaterTransparency = 0
+            terrain.WaterWaveSize = 0 terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0 terrain.WaterTransparency = 0
         end
     end)
     local lighting = game:GetService("Lighting")
@@ -1854,18 +1850,15 @@ addButton(miscPage, "Anti Lag (Clean Up)", function()
     end
     lighting.GlobalShadows = false
     lighting.FogEnd = 100000
-    pcall(function()
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-    end)
-    notify("Anti Lag", "Cleaned " .. removed .. " effects, lowered quality")
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+    notify("Anti Lag", "Cleaned " .. removed .. " effects")
 end)
 
 addButton(miscPage, "Remove Textures (Smooth)", function()
     local count = 0
     for _, v in Workspace:GetDescendants() do
         if v:IsA("BasePart") and not v:IsA("MeshPart") then
-            v.Material = Enum.Material.SmoothPlastic
-            count = count + 1
+            v.Material = Enum.Material.SmoothPlastic count = count + 1
         end
     end
     notify("Smooth", count .. " parts set to SmoothPlastic")
@@ -1878,9 +1871,7 @@ addButton(miscPage, "Click TP (Click anywhere)", function()
     local conn
     conn = Mouse.Button1Down:Connect(function()
         local hrp = getHRP()
-        if hrp and Mouse.Hit then
-            hrp.CFrame = Mouse.Hit + Vector3.new(0, 5, 0)
-        end
+        if hrp and Mouse.Hit then hrp.CFrame = Mouse.Hit + Vector3.new(0, 5, 0) end
         conn:Disconnect()
     end)
 end)
@@ -1891,9 +1882,7 @@ addButton(miscPage, "[E] TP to Mouse (Hold E)", function()
     Connections.mouseTP = RunService.RenderStepped:Connect(function()
         if UIS:IsKeyDown(Enum.KeyCode.E) then
             local hrp = getHRP()
-            if hrp and Mouse.Hit then
-                hrp.CFrame = Mouse.Hit + Vector3.new(0, 5, 0)
-            end
+            if hrp and Mouse.Hit then hrp.CFrame = Mouse.Hit + Vector3.new(0, 5, 0) end
         end
     end)
 end)
@@ -1917,7 +1906,6 @@ end)
 
 addLabel(miscPage, "-- KEYBIND")
 
--- Tampilkan key saat ini
 local keyBindBtn = addButton(miscPage, "Toggle Key: RightControl", function() end)
 keyBindBtn.TextColor3 = C.textDim
 
@@ -1930,7 +1918,6 @@ local bindBtn = addButton(miscPage, "[*] Ganti Toggle Key (tekan key apa aja)", 
         isBindingKey = true
         keyBindBtn.Text = "Tekan key baru..."
         notify("Keybind", "Tekan key yang kamu mau buat toggle UI!")
-        -- Update label setelah key dipilih
         task.spawn(function()
             while isBindingKey do task.wait(0.1) end
             keyBindBtn.Text = "Toggle Key: " .. tostring(currentToggleKey.Name)
@@ -1971,10 +1958,17 @@ UIS.InputBegan:Connect(function(input, gpe)
         if not toggleKeyDown and not toggleCooldown then
             toggleKeyDown = true
             toggleCooldown = true
-            Main.Visible = not Main.Visible
-            task.delay(0.5, function()
-                toggleCooldown = false
-            end)
+            if minimized then
+                -- Kalau lagi minimize, munculkan lagi
+                minimized = false
+                MiniBtn.Visible = false
+                Main.Size = UDim2.new(0, 520, 0, 380)
+                Main.BackgroundTransparency = 0
+                Main.Visible = true
+            else
+                Main.Visible = not Main.Visible
+            end
+            task.delay(0.5, function() toggleCooldown = false end)
         end
     end
 end)
@@ -1986,9 +1980,8 @@ UIS.InputEnded:Connect(function(input)
 end)
 
 -- ═══════════════════════════════════════
--- INTRO ANIMATION
+-- INTRO
 -- ═══════════════════════════════════════
--- Langsung tampil, tanpa animasi size biar gak ada bug hitam
 Main.BackgroundTransparency = 0
 Main.Size = UDim2.new(0, 520, 0, 380)
-notify("VelxHub Premium Universal Script", "Loaded! Press RCtrl/Insert to toggle UI")
+notify("VelxHub v1.1", "Loaded! RCtrl/Insert toggle | Bug fixes applied ✅")
