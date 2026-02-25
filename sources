@@ -1152,20 +1152,52 @@ addToggle(mPage, "Fly", false, function(on)
         flyBody.bg = bg
         flyBody.bv = bv
 
+        -- Cari thumbstick mobile
+        local function getThumbstick()
+            local playerGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
+            local touchGui = Players.LocalPlayer.PlayerGui:FindFirstChild("TouchGui")
+                or Players.LocalPlayer.PlayerGui:FindFirstChild("ControlGui")
+            -- Pakai MoveDirection dari Humanoid buat analog mobile
+            return nil
+        end
+
         Connections.fly = RunService.RenderStepped:Connect(function()
             if not States.Fly then return end
             local cam = Workspace.CurrentCamera
             bg.CFrame = cam.CFrame
             local dir = Vector3.new(0, 0, 0)
+
+            -- PC: keyboard
             if UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
             if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then dir = dir - Vector3.new(0, 1, 0) end
-            bv.Velocity = dir * FlySpeed
+
+            -- Mobile: analog (MoveDirection dari humanoid)
+            local hum = getHum()
+            if hum and hum.MoveDirection.Magnitude > 0.1 then
+                local md = hum.MoveDirection
+                -- Proyeksikan MoveDirection ke arah kamera
+                local camFlat = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z).Unit
+                local camRight = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z).Unit
+                local dot_fwd   = md:Dot(camFlat)
+                local dot_right = md:Dot(camRight)
+                dir = dir + (camFlat * dot_fwd) + (camRight * dot_right)
+            end
+
+            -- Mobile: up/down pakai Thumbstick2 (kanan)
+            local ts2 = UIS:GetGamepadState(Enum.UserInputType.Gamepad1)
+            for _, input in ipairs(ts2) do
+                if input.KeyCode == Enum.KeyCode.Thumbstick2 then
+                    dir = dir + Vector3.new(0, input.Position.Y, 0)
+                end
+            end
+
+            bv.Velocity = dir.Magnitude > 0 and dir.Unit * FlySpeed or Vector3.new(0, 0, 0)
         end)
-        notify("Fly", "Enabled ✅ (WASD + Space/Shift)")
+        notify("Fly", "Enabled ✅ (WASD/Analog + Space/Shift)")
     else
         if Connections.fly then Connections.fly:Disconnect() end
         if flyBody.bg then flyBody.bg:Destroy() end
@@ -2645,8 +2677,8 @@ local kataUsedWords    = {}
 local kataUsedList     = {}
 
 local kataCfg = {
-    minDelay   = 350,
-    maxDelay   = 650,
+    minDelay   = 80,
+    maxDelay   = 180,
     aggression = 20,
     minLength  = 2,
     maxLength  = 12,
