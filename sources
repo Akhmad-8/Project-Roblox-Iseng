@@ -2698,6 +2698,9 @@ local function kataGetWords(prefix)
     return results
 end
 
+-- REMOTES
+local kataRemotes = {}
+
 -- AUTO ENGINE (flat, no task.spawn - sama kayak script baru)
 local function kataStartAI()
     if kataAutoRunning then return end
@@ -2756,7 +2759,6 @@ local function kataStartAI()
 end
 
 -- REMOTES
-local kataRemotes = {}
 
 -- STATUS UI
 local kataStatusCard = Instance.new("Frame", kataPage)
