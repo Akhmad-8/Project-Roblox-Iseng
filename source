@@ -36,7 +36,7 @@ local WalkSpeedVal = 16
 local JumpPowerVal = 50
 local Connections = {}
 local flyBody = {}
-local currentToggleKey = Enum.KeyCode.RightControl
+local currentToggleKey = Enum.KeyCode.LeftControl
 local isBindingKey = false
 
 -- ═══════════════════════════════════════
@@ -193,7 +193,7 @@ local CloseBtn = titleBtn("X", UDim2.new(1, -38, 0, 4), C.red)
 local MinBtn = titleBtn("—", UDim2.new(1, -70, 0, 4), C.orange)
 
 local minimized = false
-local pcModeEnabled = false   -- PC Mode: disembunyikan MiniBtn saat minimize
+local pcModeEnabled = true   -- PC Mode: disembunyikan MiniBtn saat minimize
 
 -- Mini button (small square when minimized)
 local MiniBtn = Instance.new("TextButton", ScreenGui)
@@ -2526,13 +2526,13 @@ pcModeSub.TextXAlignment = Enum.TextXAlignment.Left
 local pcTogBg = Instance.new("Frame", pcModeCard)
 pcTogBg.Size = UDim2.new(0, 40, 0, 20)
 pcTogBg.Position = UDim2.new(1, -52, 0.5, -10)
-pcTogBg.BackgroundColor3 = C.toggleOff
+pcTogBg.BackgroundColor3 = C.green
 pcTogBg.BorderSizePixel = 0
 addCorner(pcTogBg, 10)
 
 local pcTogCircle = Instance.new("Frame", pcTogBg)
 pcTogCircle.Size = UDim2.new(0, 16, 0, 16)
-pcTogCircle.Position = UDim2.new(0, 2, 0, 2)
+pcTogCircle.Position = UDim2.new(1, -18, 0, 2)
 pcTogCircle.BackgroundColor3 = C.text
 pcTogCircle.BorderSizePixel = 0
 addCorner(pcTogCircle, 8)
@@ -2557,7 +2557,7 @@ pcTogBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-local keyBindBtn = addButton(miscPage, "Toggle Key: RightControl", function() end)
+local keyBindBtn = addButton(miscPage, "Toggle Key: LeftControl", function() end)
 keyBindBtn.TextColor3 = C.textDim
 
 local bindBtn = addButton(miscPage, "[*] Ganti Toggle Key (tekan key apa aja)", function()
@@ -2577,10 +2577,10 @@ local bindBtn = addButton(miscPage, "[*] Ganti Toggle Key (tekan key apa aja)", 
 end)
 
 addButton(miscPage, "[R] Reset ke Default (RightControl)", function()
-    currentToggleKey = Enum.KeyCode.RightControl
+    currentToggleKey = Enum.KeyCode.LeftControl
     isBindingKey = false
-    keyBindBtn.Text = "Toggle Key: RightControl"
-    notify("Keybind", "Reset ke RightControl")
+    keyBindBtn.Text = "Toggle Key: LeftControl"
+    notify("Keybind", "Reset ke LeftControl")
 end)
 
 addLabel(miscPage, "-- INFO")
