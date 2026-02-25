@@ -711,7 +711,7 @@ addButton(pPage, "[*] Reset Character", function()
 end)
 
 addButton(pPage, "[*] Rejoin Server", function()
-    game:GetService("TeleportService"):Teleport(game.PlaceId, Player)
+    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, Player)
 end)
 
 addButton(pPage, "[*] Server Hop", function()
@@ -2347,13 +2347,10 @@ local function isStaff(player)
 end
 
 local function doRejoin()
-    notify("⚠️ Anti Staff", "Staff terdeteksi! Rejoin...")
+    notify("⚠️ Anti Staff", "Staff terdeteksi! Pindah server...")
     task.wait(1.5)
     local TS = game:GetService("TeleportService")
-    local ok = pcall(function()
-        TS:TeleportToPlaceInstance(game.PlaceId, game.JobId, Players.LocalPlayer)
-    end)
-    if not ok then pcall(function() TS:Teleport(game.PlaceId, Players.LocalPlayer) end) end
+    TS:Teleport(game.PlaceId, Players.LocalPlayer)
 end
 
 addToggle(miscPage, "Anti Staff (Auto Rejoin)", false, function(on)
