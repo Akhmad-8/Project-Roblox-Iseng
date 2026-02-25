@@ -15,6 +15,8 @@ local Workspace = game:GetService("Workspace")
 
 local Player = Players.LocalPlayer
 local Mouse = Player:GetMouse()
+local minimized = false
+local pcModeEnabled = false   -- PC Mode: disembunyikan MiniBtn saat minimize
 
 -- State
 local States = {
@@ -191,9 +193,6 @@ end
 
 local CloseBtn = titleBtn("X", UDim2.new(1, -38, 0, 4), C.red)
 local MinBtn = titleBtn("—", UDim2.new(1, -70, 0, 4), C.orange)
-
-local minimized = false
-local pcModeEnabled = false   -- PC Mode: disembunyikan MiniBtn saat minimize
 
 -- Mini button (small square when minimized)
 local MiniBtn = Instance.new("TextButton", ScreenGui)
